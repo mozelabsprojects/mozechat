@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "489374675116",
+    "project_id": "mozechat",
+    "storage_bucket": "mozechat.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:489374675116:android:a6926887f8370d308cef09",
+        "android_client_info": {
+          "package_name": "com.example.mozechat"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyC22VVbO8Nfp2JPHEK0lXEhjcVJWm6ckVE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

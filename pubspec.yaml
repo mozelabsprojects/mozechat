@@ -1,0 +1,71 @@
+name: mozechat
+description: "A new Flutter project."
+publish_to: 'none'
+version: 0.1.0+1
+
+environment:
+  sdk: ^3.12.1
+
+dependencies:
+  audioplayers: ^6.7.1
+  bip39: ^1.0.6
+  cached_network_image: ^3.4.1
+  chewie: ^1.14.1
+  cloud_firestore: ^6.5.0
+  confetti: ^0.8.0
+  connectivity_plus: ^7.1.1
+  crypto: ^3.0.7
+  dio: ^5.9.2
+  encrypt: ^5.0.3
+  firebase_auth: ^6.5.2
+  firebase_core: ^4.10.0
+  firebase_messaging: ^16.3.0
+  firebase_storage: ^13.4.2
+  flutter:
+    sdk: flutter
+  flutter_cache_manager: ^3.4.1
+  flutter_colorpicker: ^1.1.0
+  flutter_image_compress: ^2.4.0
+  flutter_local_notifications: ^22.0.0
+  flutter_secure_storage: ^10.3.1
+  gal: ^2.3.2
+  geocoding: ^4.0.0
+  geolocator: ^14.0.2
+  image_cropper: ^12.2.1
+  image_picker: ^1.2.2
+  intl: ^0.20.2
+  path_provider: ^2.1.5
+  permission_handler: ^12.0.3
+  photo_view: ^0.15.0
+  pointycastle: ^3.9.1
+  provider: ^6.1.5+1
+  record: ^7.0.0
+  rsa_encrypt: ^2.0.0
+  screen_protector: ^1.5.2
+  screenshot_callback: ^3.0.1
+  share_plus: ^13.1.0
+  shared_preferences: ^2.5.5
+  url_launcher: ^6.3.2
+  uuid: ^4.5.3
+  video_compress: ^3.1.4
+  video_player: ^2.11.1
+  wechat_assets_picker: ^10.1.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.14.4
+
+flutter:
+  uses-material-design: true
+  assets:
+    - assets/mozechat.png
+    - assets/sounds/sentlnx.mp3
+    - assets/sounds/gtanotification.mp3
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/mozechat.png"
+

@@ -1,0 +1,31 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Odalardaki medya dosyaları
+    match /rooms/{roomId}/{fileName} {
+      // Yalnızca oda üyeleri dosyaları indirebilir
+      allow read: if isAuthenticated() && request.auth.uid in firestore.get(/databases/(default)/documents/rooms/$(roomId)).data.members;
+      // Yalnızca oda üyeleri medya yükleyebilir ve max 20MB
+      allow write: if isAuthenticated() 
+                   && request.auth.uid in firestore.get(/databases/(default)/documents/rooms/$(roomId)).data.members
+                   && request.resource.size < 20 * 1024 * 1024; 
+    }
+    
+    // Profil fotoğrafları
+    match /profile_images/{userId}/{fileName} {
+      allow read: if isAuthenticated();
+      // Kullanıcı yalnızca kendi profil resmini değiştirebilir
+      allow write: if isAuthenticated() && request.auth.uid == userId;
+    }
+
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

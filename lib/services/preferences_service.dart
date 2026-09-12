@@ -1,0 +1,165 @@
+import 'package:shared_preferences/shared_preferences.dart';
+
+class PreferencesService {
+  static const String _roomHistoryKey = 'room_history';
+  static const String _nicknameKey = 'nickname';
+  static const String _backgroundKey = 'background_style';
+  static const String _lastActiveRoomKey = 'last_active_room';
+
+  static Future<String?> getLastActiveRoom() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_lastActiveRoomKey);
+  }
+
+  static Future<void> saveLastActiveRoom(String? roomCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (roomCode == null) {
+      await prefs.remove(_lastActiveRoomKey);
+    } else {
+      await prefs.setString(_lastActiveRoomKey, roomCode);
+    }
+  }
+
+  static Future<String?> getRoomPassword(String roomCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString('lock_$roomCode');
+  }
+
+  static Future<void> saveRoomPassword(String roomCode, String? password) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (password == null) {
+      await prefs.remove('lock_$roomCode');
+    } else {
+      await prefs.setString('lock_$roomCode', password);
+    }
+  }
+
+  // Geçmiş oda kodlarını getirir.
+  static Future<List<String>> getRoomHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList(_roomHistoryKey) ?? [];
+  }
+
+  // Yeni bir odayı geçmişe ekler. En fazla 5 oda saklanır.
+  static Future<void> addRoomToHistory(String roomCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> history = prefs.getStringList(_roomHistoryKey) ?? [];
+
+    // Eğer oda zaten listede varsa başa almak için önce sil.
+    history.remove(roomCode);
+
+    // En başa ekle.
+    history.insert(0, roomCode);
+
+    // Sadece son 5 odayı tut.
+    if (history.length > 5) {
+      history = history.sublist(0, 5);
+    }
+    await prefs.setStringList(_roomHistoryKey, history);
+  }
+
+  static Future<void> removeRoomFromHistory(String roomCode) async {
+    final prefs = await SharedPreferences.getInstance();
+    List<String> history = prefs.getStringList(_roomHistoryKey) ?? [];
+    history.remove(roomCode);
+    await prefs.setStringList(_roomHistoryKey, history);
+  }
+
+  static Future<String?> getNickname() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_nicknameKey);
+  }
+
+  static Future<void> saveNickname(String? nickname) async {
+    final prefs = await SharedPreferences.getInstance();
+    if (nickname == null) {
+      await prefs.remove(_nicknameKey);
+    } else {
+      await prefs.setString(_nicknameKey, nickname);
+    }
+  }
+
+  static Future<String?> getBackgroundStyle() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getString(_backgroundKey);
+  }
+
+  static Future<void> saveBackgroundStyle(String style) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_backgroundKey, style);
+  }
+
+  static Future<int?> getThemeIndex() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('theme_index');
+  }
+
+  static Future<void> saveThemeIndex(int index) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('theme_index', index);
+  }
+
+  static Future<int?> getSenderBubbleColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('sender_bubble_color');
+  }
+
+  static Future<void> saveSenderBubbleColor(int colorValue) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('sender_bubble_color', colorValue);
+  }
+
+  static Future<int?> getReceiverBubbleColor() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getInt('receiver_bubble_color');
+  }
+
+  static Future<void> saveReceiverBubbleColor(int colorValue) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setInt('receiver_bubble_color', colorValue);
+  }
+
+  static Future<bool> getAnimationsEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool('animations_enabled') ?? true;
+  }
+
+  static Future<void> saveAnimationsEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool('animations_enabled', enabled);
+  }
+
+  static const String _incomingSoundKey = 'incoming_sound_enabled';
+  static const String _outgoingSoundKey = 'outgoing_sound_enabled';
+  static const String _notificationSoundKey = 'notification_sound_enabled';
+
+  static Future<bool> getIncomingSoundEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_incomingSoundKey) ?? true;
+  }
+
+  static Future<void> saveIncomingSoundEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_incomingSoundKey, enabled);
+  }
+
+  static Future<bool> getOutgoingSoundEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_outgoingSoundKey) ?? true;
+  }
+
+  static Future<void> saveOutgoingSoundEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_outgoingSoundKey, enabled);
+  }
+
+  static Future<bool> getNotificationSoundEnabled() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_notificationSoundKey) ?? true;
+  }
+
+  static Future<void> saveNotificationSoundEnabled(bool enabled) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_notificationSoundKey, enabled);
+  }
+}

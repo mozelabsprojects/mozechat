@@ -1,0 +1,33 @@
+{
+  "functions": {
+    "source": "functions"
+  },
+  "firestore": {
+    "rules": "firestore.rules",
+    "indexes": "firestore.indexes.json"
+  },
+  "storage": {
+    "rules": "storage.rules"
+  },
+  "flutter": {
+    "platforms": {
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "mozechat",
+          "configurations": {
+            "android": "1:489374675116:android:a6926887f8370d308cef09",
+            "ios": "1:489374675116:ios:18cad76c1812d37d8cef09",
+            "web": "1:489374675116:web:539cfc133691602f8cef09"
+          }
+        }
+      },
+      "android": {
+        "default": {
+          "projectId": "mozechat",
+          "appId": "1:489374675116:android:a6926887f8370d308cef09",
+          "fileOutput": "android/app/google-services.json"
+        }
+      }
+    }
+  }
+}
