@@ -20,6 +20,8 @@ import 'repositories/chat_repository.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:screen_protector/screen_protector.dart';
+import 'providers/call_provider.dart';
+import 'services/callkit_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -91,6 +93,25 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         }
       } catch (e) {
         // Hata durumunda yoksay
+      }
+    }
+  } else if (message.data['type'] == 'NEW_CALL') {
+    final roomId = message.data['roomId'];
+    final callerName = message.data['callerName'];
+    final callId = message.data['callId'];
+    final offerStr = message.data['offer'];
+
+    if (roomId != null && callId != null && offerStr != null) {
+      try {
+        final offer = jsonDecode(offerStr);
+        await CallkitService().showCallkitIncoming(
+          callerName: callerName ?? 'Unknown',
+          roomId: roomId,
+          callId: callId,
+          offer: offer,
+        );
+      } catch (e) {
+        debugPrint('Callkit show error: $e');
       }
     }
   }
@@ -173,6 +194,9 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => ChatProvider()..initializeState(),
         ),
+        ChangeNotifierProvider(
+          create: (_) => CallProvider(),
+        ),
       ],
       child: MozechatApp(initialRoom: initialRoom),
     ),
@@ -195,6 +219,7 @@ class _MozechatAppState extends State<MozechatApp> {
   void initState() {
     super.initState();
     _handleInitialRoute();
+    CallkitService().listenToCallEvents();
   }
 
   Future<void> _handleInitialRoute() async {

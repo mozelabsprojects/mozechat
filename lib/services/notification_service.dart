@@ -105,11 +105,14 @@ class NotificationService {
     final soundsEnabled = await PreferencesService.getNotificationSoundEnabled();
     
     final androidDetails = AndroidNotificationDetails(
-      'mozechat_messages_channel_v3',
+      'mozechat_messages_channel_v4',
       'Mesaj Bildirimleri',
       channelDescription: 'Yeni mesaj geldiğinde bildirim gönderir.',
       importance: Importance.max,
       priority: Priority.high,
+      visibility: NotificationVisibility.public,
+      category: AndroidNotificationCategory.message,
+      ticker: 'ticker',
       playSound: soundsEnabled,
       sound: const RawResourceAndroidNotificationSound('gtanotification'),
       actions: const [

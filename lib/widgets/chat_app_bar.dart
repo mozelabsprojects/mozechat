@@ -1,11 +1,14 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
 
 import '../providers/chat_provider.dart';
 import '../utils/color_utils.dart';
 import '../screens/media_gallery_screen.dart';
 import '../screens/room_screen.dart';
+import '../screens/call_screen.dart';
+import '../providers/call_provider.dart';
 
 class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<String> selectedMessages;
@@ -25,6 +28,14 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => const Size.fromHeight(kToolbarHeight);
+
+  String _formatLastSeen(DateTime lastSeen) {
+    final now = DateTime.now();
+    if (lastSeen.year == now.year && lastSeen.month == now.month && lastSeen.day == now.day) {
+      return DateFormat('HH:mm').format(lastSeen);
+    }
+    return DateFormat('MMM d, HH:mm').format(lastSeen);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +100,11 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                 Text(
                   chatProvider.isOtherTyping
                       ? '[!] Peer is encrypting data...'
-                      : (chatProvider.isOtherOnline ? 'Online' : 'Offline'),
+                      : (chatProvider.isOtherOnline
+                          ? 'Online'
+                          : (chatProvider.otherLastSeen != null
+                              ? 'Last seen: ${_formatLastSeen(chatProvider.otherLastSeen!)}'
+                              : 'Offline')),
                   style: TextStyle(
                     fontSize: 12,
                     color: chatProvider.isOtherTyping
@@ -122,6 +137,17 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ]
           : [
+              IconButton(
+                icon: Icon(Icons.phone, color: topBarTextColor),
+                onPressed: () {
+                  final callProvider = context.read<CallProvider>();
+                  callProvider.startCall(chatProvider.roomCode!, chatProvider.currentUserId!);
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const CallScreen()),
+                  );
+                },
+              ),
               PopupMenuButton<String>(
                 icon: Icon(Icons.more_vert, color: topBarTextColor),
                 color: Theme.of(context).cardColor,

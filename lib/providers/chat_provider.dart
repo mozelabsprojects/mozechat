@@ -41,6 +41,7 @@ class ChatProvider extends ChangeNotifier {
   int _memberCount = 1;
   bool _isOtherOnline = false;
   bool _isOtherTyping = false;
+  DateTime? _otherLastSeen;
   String? _lastMessageId; // Yeni mesajları takip etmek için
   Message? _replyToMessage; // Yanıtlanan mesaj
   bool _isUserInChatScreen = false; // Kullanıcı sohbet ekranında mı?
@@ -56,7 +57,9 @@ class ChatProvider extends ChangeNotifier {
 
   // God Mode Features
   List<String> _notes = [];
-  StreamSubscription<DocumentSnapshot>? _roomMetadataSubscription;
+
+  // Cached messages list (dirty flag pattern)
+  List<Message>? _cachedMessages;
 
   List<String> get notes => _notes;
 
@@ -66,14 +69,21 @@ class ChatProvider extends ChangeNotifier {
   String? get errorMessage => _errorMessage;
   bool get isLoading => _isLoading;
   List<Message> get messages {
+    if (_cachedMessages != null) return _cachedMessages!;
     final all = [..._firestoreMessages, ..._localMessages];
     all.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    _cachedMessages = all;
     return all;
+  }
+
+  void _invalidateMessagesCache() {
+    _cachedMessages = null;
   }
 
   int get memberCount => _memberCount;
   bool get isOtherOnline => _isOtherOnline;
   bool get isOtherTyping => _isOtherTyping;
+  DateTime? get otherLastSeen => _otherLastSeen;
   Message? get replyToMessage => _replyToMessage;
   String get backgroundStyle => _backgroundStyle;
 
@@ -86,7 +96,7 @@ class ChatProvider extends ChangeNotifier {
     notifyListeners();
   }
   
-  bool get hasMoreMessages => messages.length >= _messageLimit;
+  bool get hasMoreMessages => _firestoreMessages.length >= _messageLimit;
 
   void loadMoreMessages() {
     _messageLimit += 50;
@@ -104,7 +114,7 @@ class ChatProvider extends ChangeNotifier {
         sendBotMessage(msg);
       },
       clearMessages: (n) {
-        if (_roomCode != null) _repository.deleteLastNMessages(_roomCode!, n);
+        if (_roomCode != null) _repository.deleteLastNMessages(_roomCode!, n, aesKeyBase64: _currentAesKeyBase64);
       },
       addNote: (note) {
         if (_roomCode != null) _repository.addNoteToRoom(_roomCode!, note);
@@ -309,7 +319,6 @@ class ChatProvider extends ChangeNotifier {
       NotificationService.currentActiveRoomCode = code;
       NotificationService.clearNotificationsForRoom(code);
 
-      _listenToRoomMetadata();
       _listenToRoom();
       _listenToMessages();
       _setLoading(false);
@@ -348,7 +357,6 @@ class ChatProvider extends ChangeNotifier {
       NotificationService.currentActiveRoomCode = pseudoRoomCode;
       NotificationService.clearNotificationsForRoom(pseudoRoomCode);
 
-      _listenToRoomMetadata();
       _listenToRoom();
       _listenToMessages();
       _setLoading(false);
@@ -357,19 +365,6 @@ class ChatProvider extends ChangeNotifier {
       _setError(e.toString());
       return false;
     }
-  }
-
-  void _listenToRoomMetadata() {
-    if (_roomCode == null) return;
-    _roomMetadataSubscription?.cancel();
-    _roomMetadataSubscription = _repository.listenToRoomMetadata(_roomCode!).listen((doc) {
-      if (doc.exists) {
-        final data = doc.data() as Map<String, dynamic>? ?? {};
-        final notesData = data['notes'] as List<dynamic>? ?? [];
-        _notes = notesData.cast<String>();
-        notifyListeners();
-      }
-    });
   }
 
 
@@ -476,13 +471,13 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> deleteMessage(String messageId) async {
     if (_roomCode != null) {
-      await _repository.deleteMessage(_roomCode!, messageId);
+      await _repository.deleteMessage(_roomCode!, messageId, aesKeyBase64: _currentAesKeyBase64);
     }
   }
 
   Future<void> deleteMessages(List<String> messageIds) async {
     if (_roomCode != null && messageIds.isNotEmpty) {
-      await _repository.deleteMessages(_roomCode!, messageIds);
+      await _repository.deleteMessages(_roomCode!, messageIds, aesKeyBase64: _currentAesKeyBase64);
     }
   }
 
@@ -537,13 +532,30 @@ class ChatProvider extends ChangeNotifier {
 
           final presence = data['presence'] as Map<String, dynamic>? ?? {};
           final typing = data['typing'] as Map<String, dynamic>? ?? {};
+          final lastSeenMap = data['lastSeen'] as Map<String, dynamic>? ?? {};
+
+          // Merge notes from room metadata (eliminates duplicate listener)
+          final notesData = data['notes'] as List<dynamic>? ?? [];
+          _notes = notesData.cast<String>();
 
           _isOtherOnline = false;
           _isOtherTyping = false;
+          _otherLastSeen = null;
 
           presence.forEach((key, value) {
-            if (key != currentUid && value == true) {
-              _isOtherOnline = true;
+            if (key != currentUid) {
+              if (value == true) {
+                _isOtherOnline = true;
+              } else {
+                final ls = lastSeenMap[key];
+                if (ls is Timestamp) {
+                  final seenDate = ls.toDate();
+                  // Pick the most recent lastSeen among offline users
+                  if (_otherLastSeen == null || seenDate.isAfter(_otherLastSeen!)) {
+                    _otherLastSeen = seenDate;
+                  }
+                }
+              }
             }
           });
 
@@ -566,6 +578,7 @@ class ChatProvider extends ChangeNotifier {
           .listenToMessages(_roomCode!, limit: _messageLimit, aesKeyBase64: _currentAesKeyBase64)
           .listen(
             (msgs) {
+              bool isInitialLoad = _firestoreMessages.isEmpty;
               _firestoreMessages = msgs;
 
               // Local mesajları temizle (Eğer firestore'a ulaşmışlarsa)
@@ -583,7 +596,10 @@ class ChatProvider extends ChangeNotifier {
                 if (latestMsg.senderId != currentUid &&
                     latestMsg.id != _lastMessageId) {
                   _lastMessageId = latestMsg.id;
-                  _playSound('sounds/gtanotification.mp3');
+                  
+                  if (!isInitialLoad) {
+                    _playSound('sounds/gtanotification.mp3');
+                  }
                 }
 
                 // Status update logic:
@@ -649,6 +665,7 @@ class ChatProvider extends ChangeNotifier {
                 }
               }
 
+              _invalidateMessagesCache();
               notifyListeners();
             },
             onError: (e) {
@@ -694,11 +711,11 @@ class ChatProvider extends ChangeNotifier {
     NotificationService.currentActiveRoomCode = null;
     _messagesSubscription?.cancel();
     _roomSubscription?.cancel();
-    _roomMetadataSubscription?.cancel();
     // Oda geçmişten SİLİNMEZ, sadece abonelik biter.
     _roomCode = null;
     _firestoreMessages = [];
     _localMessages = [];
+    _invalidateMessagesCache();
     _lastMessageId = null;
     _roomJoinTime = null;
     _processedCommandIds.clear();
@@ -709,6 +726,7 @@ class ChatProvider extends ChangeNotifier {
   // Local message handling
   void addLocalMessage(Message msg) {
     _localMessages.add(msg);
+    _invalidateMessagesCache();
     notifyListeners();
   }
 
@@ -728,12 +746,14 @@ class ChatProvider extends ChangeNotifier {
         status: status,
         localId: old.localId,
       );
+      _invalidateMessagesCache();
       notifyListeners();
     }
   }
 
   void removeLocalMessage(String localId) {
     _localMessages.removeWhere((m) => m.localId == localId);
+    _invalidateMessagesCache();
     notifyListeners();
   }
 
@@ -771,7 +791,6 @@ class ChatProvider extends ChangeNotifier {
     updatePresence(false);
     _messagesSubscription?.cancel();
     _roomSubscription?.cancel();
-    _roomMetadataSubscription?.cancel();
     super.dispose();
   }
 

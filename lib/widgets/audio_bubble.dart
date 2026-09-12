@@ -58,8 +58,12 @@ class _AudioBubbleState extends State<AudioBubble> {
         if (cachedFile != null) {
           await _audioPlayer.setSourceDeviceFile(cachedFile.path);
         } else {
-          await _audioPlayer.setSourceUrl(widget.audioUrl);
-          AudioCacheService.downloadAndCacheAudio(widget.audioUrl);
+          final downloadedFile = await AudioCacheService.downloadAndCacheAudio(widget.audioUrl);
+          if (downloadedFile != null) {
+            await _audioPlayer.setSourceDeviceFile(downloadedFile.path);
+          } else {
+            await _audioPlayer.setSourceUrl(widget.audioUrl);
+          }
         }
         
         // Wait briefly for the player to initialize, then attempt to get duration directly

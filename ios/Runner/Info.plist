@@ -28,6 +28,16 @@
 	<true/>
 	<key>NSContactsUsageDescription</key>
 	<string>Rehberinizdeki kişileri bularak sohbet etmeniz için gereklidir.</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Fotoğraf veya video çekmek için kameranıza erişim gereklidir.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>Sesli mesaj göndermek ve video kaydetmek için mikrofona erişim gereklidir.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>Galerinizden fotoğraf veya video seçmek için erişim gereklidir.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Konumunuzu paylaşmak için konum bilgilerinize erişim gereklidir.</string>
+	<key>NSLocationAlwaysUsageDescription</key>
+	<string>Konumunuzu her zaman paylaşmak için konum bilgilerinize erişim gereklidir.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>
@@ -53,6 +63,7 @@
 	<array>
 		<string>fetch</string>
 		<string>remote-notification</string>
+		<string>voip</string>
 	</array>
 	<key>UIApplicationSupportsIndirectInputEvents</key>
 	<true/>

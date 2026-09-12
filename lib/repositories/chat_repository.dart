@@ -537,9 +537,11 @@ class ChatRepository {
     return buffer.toString();
   }
 
-  Future<void> deleteMessage(String roomCode, String messageId) async {
+  Future<void> deleteMessage(String roomCode, String messageId, {String? aesKeyBase64}) async {
     final roomId = CryptoService.deriveRoomId(roomCode);
-    final key = CryptoService.deriveEncryptionKey(roomCode);
+    final key = aesKeyBase64 != null 
+        ? encrypt.Key.fromBase64(aesKeyBase64)
+        : CryptoService.deriveEncryptionKey(roomCode);
     final docRef = _firestore
         .collection('rooms')
         .doc(roomId)
@@ -595,63 +597,71 @@ class ChatRepository {
     }
   }
 
-  Future<void> deleteMessages(String roomCode, List<String> messageIds) async {
+  Future<void> deleteMessages(String roomCode, List<String> messageIds, {String? aesKeyBase64}) async {
     final roomId = CryptoService.deriveRoomId(roomCode);
-    final key = CryptoService.deriveEncryptionKey(roomCode);
-    final batch = _firestore.batch();
+    final key = aesKeyBase64 != null 
+        ? encrypt.Key.fromBase64(aesKeyBase64)
+        : CryptoService.deriveEncryptionKey(roomCode);
 
-    for (final messageId in messageIds) {
-      final docRef = _firestore
-          .collection('rooms')
-          .doc(roomId)
-          .collection('messages')
-          .doc(messageId);
-      final snapshot = await docRef.get();
-      if (!snapshot.exists) continue;
+    // Process in chunks of 500 to respect Firestore batch limit
+    for (var i = 0; i < messageIds.length; i += 500) {
+      final batch = _firestore.batch();
+      final end = (i + 500 < messageIds.length) ? i + 500 : messageIds.length;
+      final chunk = messageIds.sublist(i, end);
 
-      final data = snapshot.data()!;
-      final cipherText = data['cipherText'] as String?;
-      final iv = data['iv'] as String?;
+      for (final messageId in chunk) {
+        final docRef = _firestore
+            .collection('rooms')
+            .doc(roomId)
+            .collection('messages')
+            .doc(messageId);
+        final snapshot = await docRef.get();
+        if (!snapshot.exists) continue;
 
-      String nickname = 'Unknown';
-      if (cipherText != null && iv != null && cipherText.isNotEmpty) {
-        final decrypted = CryptoService.decryptMessage(cipherText, iv, key);
-        try {
-          final payloadMap = jsonDecode(decrypted);
-          nickname = payloadMap['nickname'] ?? 'Unknown';
-          final mediaUrl = payloadMap['mediaUrl'] as String?;
-          if (mediaUrl != null) {
-            MediaService().deleteMediaFile(mediaUrl); // Fire and forget
-          }
-          final mediaList = payloadMap['mediaList'] as List<dynamic>?;
-          if (mediaList != null) {
-            for (var m in mediaList) {
-              final mUrl = m['url'] as String?;
-              if (mUrl != null) MediaService().deleteMediaFile(mUrl);
+        final data = snapshot.data()!;
+        final cipherText = data['cipherText'] as String?;
+        final iv = data['iv'] as String?;
+
+        String nickname = 'Unknown';
+        if (cipherText != null && iv != null && cipherText.isNotEmpty) {
+          final decrypted = CryptoService.decryptMessage(cipherText, iv, key);
+          try {
+            final payloadMap = jsonDecode(decrypted);
+            nickname = payloadMap['nickname'] ?? 'Unknown';
+            final mediaUrl = payloadMap['mediaUrl'] as String?;
+            if (mediaUrl != null) {
+              MediaService().deleteMediaFile(mediaUrl); // Fire and forget
             }
-          }
-        } catch (_) {}
+            final mediaList = payloadMap['mediaList'] as List<dynamic>?;
+            if (mediaList != null) {
+              for (var m in mediaList) {
+                final mUrl = m['url'] as String?;
+                if (mUrl != null) MediaService().deleteMediaFile(mUrl);
+              }
+            }
+          } catch (_) {}
+        }
+
+        final newPayloadMap = {
+          'text': 'Bu mesaj silindi',
+          'nickname': nickname,
+          'type': 'deleted',
+        };
+
+        final encryptedMsg = CryptoService.encryptMessage(
+          jsonEncode(newPayloadMap),
+          key,
+        );
+
+        batch.update(docRef, {
+          'isDeleted': true,
+          'cipherText': encryptedMsg.cipherText,
+          'iv': encryptedMsg.ivBase64,
+        });
       }
 
-      final newPayloadMap = {
-        'text': 'Bu mesaj silindi',
-        'nickname': nickname,
-        'type': 'deleted',
-      };
-
-      final encryptedMsg = CryptoService.encryptMessage(
-        jsonEncode(newPayloadMap),
-        key,
-      );
-
-      batch.update(docRef, {
-        'isDeleted': true,
-        'cipherText': encryptedMsg.cipherText,
-        'iv': encryptedMsg.ivBase64,
-      });
+      await batch.commit();
     }
-
-    await batch.commit();
   }
 
   Future<void> hardDeleteMessage(String roomCode, String messageId) async {
@@ -714,11 +724,13 @@ class ChatRepository {
     });
   }
 
-  Future<void> deleteLastNMessages(String roomCode, int n) async {
+  Future<void> deleteLastNMessages(String roomCode, int n, {String? aesKeyBase64}) async {
     final uid = currentUserId;
     if (uid == null) return;
     final roomId = CryptoService.deriveRoomId(roomCode);
-    final key = CryptoService.deriveEncryptionKey(roomCode);
+    final key = aesKeyBase64 != null 
+        ? encrypt.Key.fromBase64(aesKeyBase64)
+        : CryptoService.deriveEncryptionKey(roomCode);
     
     final query = await _firestore
         .collection('rooms')
@@ -839,6 +851,7 @@ class ChatRepository {
     try {
       await _firestore.collection('rooms').doc(roomId).update({
         'presence.$uid': isOnline,
+        if (!isOnline) 'lastSeen.$uid': FieldValue.serverTimestamp(),
       });
     } catch (e) {
       // Document might not exist if they leave before creating properly, ignore.
