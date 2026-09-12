@@ -4,6 +4,8 @@ import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
 import 'package:flutter_callkit_incoming/entities/notification_params.dart';
 import 'package:flutter_callkit_incoming/entities/ios_params.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
+import 'package:flutter/foundation.dart';
+import 'dart:convert';
 
 class CallkitService {
   static final CallkitService _instance = CallkitService._internal();
@@ -23,7 +25,7 @@ class CallkitService {
       id: callId,
       nameCaller: callerName,
       appName: 'Mozechat',
-      avatar: 'https://i.pravatar.cc/100',
+      avatar: '',
       handle: 'Incoming Call',
       type: 0,
       missedCallNotification: const NotificationParams(
@@ -78,7 +80,15 @@ class CallkitService {
       if (event is CallEventActionCallAccept) {
         final extra = event.callKitParams.extra;
         if (onCallAccepted != null && extra != null) {
-          onCallAccepted!(event.callKitParams.id, extra['offer'], extra['roomId']);
+          var offer = extra['offer'];
+          if (offer is String) {
+            try {
+              offer = jsonDecode(offer);
+            } catch (e) {
+              debugPrint("Error decoding offer: $e");
+            }
+          }
+          onCallAccepted!(event.callKitParams.id, offer, extra['roomId']);
         }
       } else if (event is CallEventActionCallDecline) {
         final extra = event.callKitParams.extra;

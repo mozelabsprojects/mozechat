@@ -12,6 +12,7 @@ class CallScreen extends StatefulWidget {
 
 class _CallScreenState extends State<CallScreen> {
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
+  late CallProvider _callProvider;
   
   @override
   void initState() {
@@ -19,7 +20,8 @@ class _CallScreenState extends State<CallScreen> {
     _initRenderers();
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) {
-        context.read<CallProvider>().addListener(_onCallStateChanged);
+        _callProvider = context.read<CallProvider>();
+        _callProvider.addListener(_onCallStateChanged);
       }
     });
   }
@@ -29,10 +31,15 @@ class _CallScreenState extends State<CallScreen> {
   void _onCallStateChanged() {
     if (!mounted || _hasPopped) return;
     
-    final provider = context.read<CallProvider>();
-    if (!provider.isInCall) {
+    if (!_callProvider.isInCall) {
       _hasPopped = true;
       Navigator.of(context).pop();
+    } else {
+      if (_callProvider.remoteStream != null && _remoteRenderer.srcObject != _callProvider.remoteStream) {
+        setState(() {
+          _remoteRenderer.srcObject = _callProvider.remoteStream;
+        });
+      }
     }
   }
 
@@ -42,7 +49,7 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   void dispose() {
-    context.read<CallProvider>().removeListener(_onCallStateChanged);
+    _callProvider.removeListener(_onCallStateChanged);
     _remoteRenderer.dispose();
     super.dispose();
   }
@@ -54,7 +61,13 @@ class _CallScreenState extends State<CallScreen> {
     final primaryColor = isDark ? Colors.greenAccent : Colors.teal;
 
     if (callProvider.remoteStream != null && _remoteRenderer.srcObject != callProvider.remoteStream) {
-      _remoteRenderer.srcObject = callProvider.remoteStream;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          setState(() {
+            _remoteRenderer.srcObject = callProvider.remoteStream;
+          });
+        }
+      });
     }
 
     return Scaffold(
@@ -140,13 +153,13 @@ class _CallScreenState extends State<CallScreen> {
                     },
                   ),
                   
-                  // Speaker Button (Placeholder for now)
+                  // Speaker Button
                   _buildControlButton(
-                    icon: Icons.volume_up,
-                    color: isDark ? Colors.white24 : Colors.grey[300]!,
-                    iconColor: isDark ? Colors.white : Colors.black87,
+                    icon: callProvider.isSpeaker ? Icons.volume_up : Icons.volume_down,
+                    color: callProvider.isSpeaker ? Colors.white : (isDark ? Colors.white24 : Colors.grey[300]!),
+                    iconColor: callProvider.isSpeaker ? Colors.black : (isDark ? Colors.white : Colors.black87),
                     onPressed: () {
-                      // Toggle speaker
+                      context.read<CallProvider>().toggleSpeaker();
                     },
                   ),
                 ],

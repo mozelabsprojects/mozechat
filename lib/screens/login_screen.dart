@@ -64,7 +64,10 @@ class _LoginScreenState extends State<LoginScreen>
       final seedPhrase = _seedController.text.trim();
       if (seedPhrase.isEmpty) return;
 
-      chatProvider.setNickname('Restored_Agent');
+      final nickname = _nicknameController.text.trim();
+      if (nickname.isEmpty) return;
+
+      chatProvider.setNickname(nickname);
       
       await chatProvider.restoreIdentity(seedPhrase);
 
@@ -305,7 +308,6 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                         const SizedBox(height: 36),
 
-                        if (!_isRestoreMode) ...[
                           // Nickname label
                           Row(
                             children: [
@@ -364,7 +366,9 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                             onSubmitted: (_) => _loginOrRestore(),
                           ),
-                        ] else ...[
+
+                        if (_isRestoreMode) ...[
+                          const SizedBox(height: 16),
                           // Seed phrase label
                           Row(
                             children: [

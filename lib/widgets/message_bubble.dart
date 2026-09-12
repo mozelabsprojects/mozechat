@@ -145,6 +145,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
 
   @override
   Widget build(BuildContext context) {
+    if (widget.msg.isDeleted && widget.msg.metadata?['burnAfterRead'] == true) {
+      return const SizedBox.shrink();
+    }
+    
     final timeString = DateFormat('HH:mm').format(widget.msg.timestamp);
     final isBurn = widget.msg.metadata?['burnAfterRead'] == true && !widget.msg.isDeleted;
     final bgColor = isBurn ? Colors.orangeAccent.withValues(alpha: 0.1) : widget.currentBg;

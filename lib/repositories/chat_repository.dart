@@ -169,19 +169,30 @@ class ChatRepository {
   Future<void> kickMembers(String roomCode) async {
     final uid = currentUserId;
     if (uid == null) return;
-
+    
     final roomId = CryptoService.deriveRoomId(roomCode);
     final roomRef = _firestore.collection('rooms').doc(roomId);
-
+    
     final doc = await roomRef.get();
-    if (doc.exists) {
-      final members = doc.data()?['members'] as List<dynamic>? ?? [];
-      if (members.isNotEmpty && members[0] == uid) {
-        await roomRef.update({
-          'members': [uid],
-        });
+    if (!doc.exists) return;
+    
+    final members = List<String>.from(doc.data()?['members'] ?? []);
+    if (members.isEmpty || members.first != uid) return;
+    
+    // Yalnızca odayı kuran kişi (ilk üye) kalır
+    final updates = <String, dynamic>{
+      'members': [uid],
+    };
+    
+    // Diğer üyelerin fcm token'larını temizle
+    final fcmTokens = doc.data()?['fcmTokens'] as Map<String, dynamic>? ?? {};
+    for (var key in fcmTokens.keys) {
+      if (key != uid) {
+        updates['fcmTokens.$key'] = FieldValue.delete();
       }
     }
+    
+    await roomRef.update(updates);
   }
 
   Future<void> leaveRoom(String roomCode) async {
@@ -193,7 +204,11 @@ class ChatRepository {
 
     await roomRef.update({
       'members': FieldValue.arrayRemove([uid]),
+      'fcmTokens.$uid': FieldValue.delete(),
     });
+
+    // Kendi listesinden de sil
+    await _firestore.collection('users').doc(uid).collection('rooms').doc(roomCode).delete();
   }
 
   Future<void> updateTypingStatus(String roomCode, bool isTyping) async {

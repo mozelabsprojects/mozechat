@@ -44,6 +44,15 @@ service cloud.firestore {
         allow read, write: if isAuthenticated() && isRoomMember(roomId);
       }
       
+      // Aramalara (WebRTC) yalnızca oda üyeleri erişebilir
+      match /calls/{callId} {
+        allow read, write: if isAuthenticated() && isRoomMember(roomId);
+        
+        match /{document=**} {
+          allow read, write: if isAuthenticated() && isRoomMember(roomId);
+        }
+      }
+      
       // Aktif oyunlara yalnızca oda üyeleri erişebilir
       match /active_games/{gameId} {
         allow read, write: if isAuthenticated() && isRoomMember(roomId);

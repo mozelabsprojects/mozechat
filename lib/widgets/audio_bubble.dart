@@ -23,7 +23,7 @@ class AudioBubble extends StatefulWidget {
   State<AudioBubble> createState() => _AudioBubbleState();
 }
 
-class _AudioBubbleState extends State<AudioBubble> {
+class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClientMixin {
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
@@ -36,8 +36,12 @@ class _AudioBubbleState extends State<AudioBubble> {
   StreamSubscription? _playerStateChangeSubscription;
 
   @override
+  bool get wantKeepAlive => true;
+
+  @override
   void initState() {
     super.initState();
+    _audioPlayer.setReleaseMode(ReleaseMode.stop);
     _initAudio();
   }
 
@@ -143,6 +147,7 @@ class _AudioBubbleState extends State<AudioBubble> {
 
   @override
   Widget build(BuildContext context) {
+    super.build(context);
     return Container(
       width: 250,
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),

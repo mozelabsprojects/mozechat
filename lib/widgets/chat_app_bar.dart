@@ -139,20 +139,33 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
           : [
               IconButton(
                 icon: Icon(Icons.phone, color: topBarTextColor),
-                onPressed: () {
+                onPressed: () async {
                   final callProvider = context.read<CallProvider>();
-                  callProvider.startCall(chatProvider.roomCode!, chatProvider.currentUserId!);
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const CallScreen()),
-                  );
+                  try {
+                    await callProvider.startCall(chatProvider.roomCode!, chatProvider.currentUserId!, chatProvider.nickname ?? 'Arayan Kişi');
+                    if (context.mounted) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(builder: (_) => const CallScreen()),
+                      );
+                    }
+                  } catch (e) {
+                    debugPrint('Start call failed: $e');
+                  }
                 },
               ),
               PopupMenuButton<String>(
                 icon: Icon(Icons.more_vert, color: topBarTextColor),
                 color: Theme.of(context).cardColor,
                 onSelected: (value) {
-                  if (value == 'gallery') {
+                  if (value == 'leave') {
+                    chatProvider.leaveRoom();
+                    Navigator.pushAndRemoveUntil(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RoomScreen()),
+                      (route) => false,
+                    );
+                  } else if (value == 'gallery') {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -167,16 +180,22 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     onShowCommands();
                   } else if (value == 'copy') {
                     onCopyCode();
-                  } else if (value == 'leave') {
-                    chatProvider.leaveRoom();
-                    Navigator.pushAndRemoveUntil(
-                      context,
-                      MaterialPageRoute(builder: (_) => const RoomScreen()),
-                      (route) => false,
-                    );
                   }
                 },
                 itemBuilder: (BuildContext context) => [
+                  const PopupMenuItem(
+                    value: 'leave',
+                    child: ListTile(
+                      leading: Icon(
+                        Icons.exit_to_app,
+                        color: Colors.redAccent,
+                      ),
+                      title: Text(
+                        'Leave Node',
+                        style: TextStyle(color: Colors.redAccent),
+                      ),
+                    ),
+                  ),
                   const PopupMenuItem(
                     value: 'gallery',
                     child: ListTile(
@@ -210,19 +229,6 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     child: ListTile(
                       leading: Icon(Icons.copy),
                       title: Text('Copy Node Code'),
-                    ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'leave',
-                    child: ListTile(
-                      leading: Icon(
-                        Icons.exit_to_app,
-                        color: Colors.redAccent,
-                      ),
-                      title: Text(
-                        'Leave Node',
-                        style: TextStyle(color: Colors.redAccent),
-                      ),
                     ),
                   ),
                 ],

@@ -92,7 +92,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           );
         }
       } catch (e) {
-        // Hata durumunda yoksay
+        debugPrint('Background decryption failed: $e');
+        await NotificationService.initialize();
+        if (NotificationService.currentActiveRoomCode != matchedCode) {
+          await NotificationService.showMessageNotification(
+            title: 'Yeni Mesaj',
+            body: 'E2E şifreli yeni bir mesajınız var.',
+            payload: matchedCode,
+          );
+        }
       }
     }
   } else if (message.data['type'] == 'NEW_CALL') {
@@ -196,6 +204,7 @@ void main() async {
         ),
         ChangeNotifierProvider(
           create: (_) => CallProvider(),
+          lazy: false,
         ),
       ],
       child: MozechatApp(initialRoom: initialRoom),
@@ -257,7 +266,16 @@ class _MozechatAppState extends State<MozechatApp> {
         final chatProvider = context.read<ChatProvider>();
         final success = await chatProvider.joinRoom(widget.initialRoom!);
         if (success && mounted) {
-          _homeScreen = const ChatScreen();
+          _homeScreen = const RoomScreen();
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (navigatorKey.currentState != null) {
+              navigatorKey.currentState!.push(
+                MaterialPageRoute(builder: (_) => const ChatScreen()),
+              );
+            }
+          });
+        } else {
+          _homeScreen = const RoomScreen();
         }
       } else {
         _homeScreen = const RoomScreen();

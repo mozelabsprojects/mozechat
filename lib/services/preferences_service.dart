@@ -50,7 +50,7 @@ class PreferencesService {
   // Yeni bir odayı geçmişe ekler. En fazla 5 oda saklanır.
   static Future<void> addRoomToHistory(String roomCode) async {
     final prefs = await _getPrefs();
-    List<String> history = prefs.getStringList(_roomHistoryKey) ?? [];
+    List<String> history = List<String>.from(prefs.getStringList(_roomHistoryKey) ?? []);
 
     // Eğer oda zaten listede varsa başa almak için önce sil.
     history.remove(roomCode);
@@ -67,7 +67,7 @@ class PreferencesService {
 
   static Future<void> removeRoomFromHistory(String roomCode) async {
     final prefs = await _getPrefs();
-    List<String> history = prefs.getStringList(_roomHistoryKey) ?? [];
+    List<String> history = List<String>.from(prefs.getStringList(_roomHistoryKey) ?? []);
     history.remove(roomCode);
     await prefs.setStringList(_roomHistoryKey, history);
   }

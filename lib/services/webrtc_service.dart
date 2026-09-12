@@ -14,6 +14,16 @@ class WebRTCService {
     'iceServers': [
       {'urls': 'stun:stun.l.google.com:19302'},
       {'urls': 'stun:stun1.l.google.com:19302'},
+      {
+        'urls': 'turn:openrelay.metered.ca:80',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject'
+      },
+      {
+        'urls': 'turn:openrelay.metered.ca:443',
+        'username': 'openrelayproject',
+        'credential': 'openrelayproject'
+      }
     ]
   };
 
@@ -51,6 +61,7 @@ class WebRTCService {
     };
 
     _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
+      debugPrint("WebRTC Connection State: $state");
       if (onConnectionState != null) onConnectionState!(state);
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
@@ -59,15 +70,19 @@ class WebRTCService {
       }
     };
 
-    _peerConnection!.onAddStream = (MediaStream stream) {
-      _remoteStream = stream;
-      if (onRemoteStreamAdded != null) {
-        onRemoteStreamAdded!(stream);
+    _peerConnection!.onTrack = (RTCTrackEvent event) {
+      if (event.streams.isNotEmpty) {
+        _remoteStream = event.streams[0];
+        if (onRemoteStreamAdded != null) {
+          onRemoteStreamAdded!(_remoteStream!);
+        }
       }
     };
 
     if (_localStream != null) {
-      _peerConnection!.addStream(_localStream!);
+      for (var track in _localStream!.getTracks()) {
+        _peerConnection!.addTrack(track, _localStream!);
+      }
     }
 
     RTCSessionDescription offer = await _peerConnection!.createOffer(_offerSdpConstraints);
@@ -100,6 +115,7 @@ class WebRTCService {
     };
 
     _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
+      debugPrint("WebRTC Connection State (Answer): $state");
       if (onConnectionState != null) onConnectionState!(state);
       if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
@@ -108,20 +124,25 @@ class WebRTCService {
       }
     };
 
-    _peerConnection!.onAddStream = (MediaStream stream) {
-      _remoteStream = stream;
-      if (onRemoteStreamAdded != null) {
-        onRemoteStreamAdded!(stream);
+    _peerConnection!.onTrack = (RTCTrackEvent event) {
+      if (event.streams.isNotEmpty) {
+        _remoteStream = event.streams[0];
+        if (onRemoteStreamAdded != null) {
+          onRemoteStreamAdded!(_remoteStream!);
+        }
       }
     };
 
     if (_localStream != null) {
-      _peerConnection!.addStream(_localStream!);
+      for (var track in _localStream!.getTracks()) {
+        _peerConnection!.addTrack(track, _localStream!);
+      }
     }
 
     await _peerConnection!.setRemoteDescription(
       RTCSessionDescription(offer['sdp'], offer['type']),
     );
+    _hasSetRemoteDescription = true;
 
     RTCSessionDescription answer = await _peerConnection!.createAnswer(_offerSdpConstraints);
     await _peerConnection!.setLocalDescription(answer);
@@ -131,6 +152,7 @@ class WebRTCService {
       'type': answer.type,
     });
 
+    _processQueuedCandidates();
     _listenToIceCandidates();
   }
 
@@ -140,6 +162,21 @@ class WebRTCService {
       'video': false,
     };
     _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+  }
+
+  bool _hasSetRemoteDescription = false;
+  bool _isEndingCall = false;
+  final List<RTCIceCandidate> _remoteCandidatesQueue = [];
+
+  void _processQueuedCandidates() {
+    for (var candidate in _remoteCandidatesQueue) {
+      try {
+        _peerConnection?.addCandidate(candidate);
+      } catch (e) {
+        debugPrint("addCandidate error: $e");
+      }
+    }
+    _remoteCandidatesQueue.clear();
   }
 
   void _listenToAnswerAndIceCandidates() {
@@ -152,13 +189,19 @@ class WebRTCService {
         return;
       }
 
-      if (_peerConnection?.getRemoteDescription() != null) return;
+      if (_hasSetRemoteDescription) return;
       
       if (data.containsKey('answer')) {
+        _hasSetRemoteDescription = true;
         var answer = data['answer'];
-        await _peerConnection?.setRemoteDescription(
-          RTCSessionDescription(answer['sdp'], answer['type']),
-        );
+        try {
+          await _peerConnection?.setRemoteDescription(
+            RTCSessionDescription(answer['sdp'], answer['type']),
+          );
+          _processQueuedCandidates();
+        } catch (e) {
+          debugPrint("setRemoteDescription error: $e");
+        }
       }
     });
 
@@ -168,22 +211,34 @@ class WebRTCService {
   void _listenToIceCandidates() {
     final remoteRole = _role == 'caller' ? 'callee' : 'caller';
     _callRepository.listenToIceCandidates(_roomId!, _callId!, remoteRole).listen((snapshot) {
+      if (_isEndingCall) return;
       for (var change in snapshot.docChanges) {
         if (change.type == DocumentChangeType.added) {
           var data = change.doc.data() as Map<String, dynamic>;
-          _peerConnection?.addCandidate(
-            RTCIceCandidate(
-              data['candidate'],
-              data['sdpMid'],
-              data['sdpMLineIndex'],
-            ),
+          var candidate = RTCIceCandidate(
+            data['candidate'],
+            data['sdpMid'],
+            data['sdpMLineIndex'],
           );
+
+          if (!_hasSetRemoteDescription) {
+            _remoteCandidatesQueue.add(candidate);
+          } else {
+            try {
+              _peerConnection?.addCandidate(candidate);
+            } catch (e) {
+              debugPrint("addCandidate error: $e");
+            }
+          }
         }
       }
     });
   }
 
   Future<void> endCall() async {
+    if (_isEndingCall) return;
+    _isEndingCall = true;
+
     try {
       if (_roomId != null && _callId != null) {
         await _callRepository.endCall(_roomId!, _callId!);
@@ -192,16 +247,27 @@ class WebRTCService {
       debugPrint("Error ending call in DB: $e");
     }
     
-    _localStream?.getTracks().forEach((track) => track.stop());
-    _remoteStream?.getTracks().forEach((track) => track.stop());
-    await _localStream?.dispose();
-    await _remoteStream?.dispose();
-    await _peerConnection?.close();
-    await _peerConnection?.dispose();
+    try {
+      _localStream?.getTracks().forEach((track) => track.stop());
+      _remoteStream?.getTracks().forEach((track) => track.stop());
+      await _localStream?.dispose();
+      await _remoteStream?.dispose();
+    } catch (e) {
+      debugPrint("Error disposing streams: $e");
+    }
+
+    try {
+      await _peerConnection?.close();
+      await _peerConnection?.dispose();
+    } catch (e) {
+      debugPrint("Error disposing peer connection: $e");
+    }
     
     _peerConnection = null;
     _localStream = null;
     _remoteStream = null;
+    _hasSetRemoteDescription = false;
+    _isEndingCall = false;
     
     if (onCallEnded != null) onCallEnded!();
   }
@@ -212,6 +278,10 @@ class WebRTCService {
         track.enabled = !isMuted;
       }
     }
+  }
+
+  void toggleSpeaker(bool isSpeaker) {
+    Helper.setSpeakerphoneOn(isSpeaker);
   }
 
   MediaStream? get localStream => _localStream;

@@ -59,6 +59,70 @@ exports.sendNewMessageNotification = onDocumentCreated("rooms/{roomId}/messages/
     }
 });
 
+exports.sendNewCallNotification = onDocumentCreated("rooms/{roomId}/calls/{callId}", async (event) => {
+    const callData = event.data.data();
+    if (!callData) return;
+
+    // Sadece yeni başlayan (ringing) aramalar için bildirim at
+    if (callData.status !== 'ringing') return;
+
+    const callerId = callData.callerId;
+    const roomId = event.params.roomId;
+    const callId = event.params.callId;
+
+    const roomSnap = await admin.firestore().collection("rooms").doc(roomId).get();
+    if (!roomSnap.exists) return;
+
+    const roomData = roomSnap.data();
+    const fcmTokens = roomData.fcmTokens || {};
+
+    const tokensToNotify = [];
+
+    for (const [uid, token] of Object.entries(fcmTokens)) {
+        if (uid !== callerId && token) {
+            tokensToNotify.push(token);
+        }
+    }
+
+    if (tokensToNotify.length === 0) {
+        console.log("Arama bildirimi atılacak token bulunamadı.");
+        return;
+    }
+
+    // Kullanıcı adını bulalım
+    const callerSnap = await admin.firestore().collection("users").doc(callerId).get();
+    const callerName = callerSnap.exists ? (callerSnap.data().nickname || "Biri") : "Biri";
+
+    const payload = {
+        data: {
+            type: "NEW_CALL",
+            roomId: roomId,
+            callId: callId,
+            callerName: callerName,
+            offer: JSON.stringify(callData.offer || {}),
+        }
+    };
+
+    try {
+        const response = await admin.messaging().sendEachForMulticast({
+            tokens: tokensToNotify,
+            data: payload.data,
+            android: { priority: "high" },
+            apns: {
+                payload: {
+                    aps: {
+                        contentAvailable: true,
+                        sound: "default"
+                    }
+                }
+            }
+        });
+        console.log("Call push notifications sent:", response.successCount);
+    } catch (error) {
+        console.error("Error sending call push notifications:", error);
+    }
+});
+
 exports.deleteRoomAdmin = onCall(async (request) => {
     const uid = request.auth?.uid;
     if (!uid) {

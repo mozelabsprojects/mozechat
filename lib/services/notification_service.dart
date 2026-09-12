@@ -105,7 +105,7 @@ class NotificationService {
     final soundsEnabled = await PreferencesService.getNotificationSoundEnabled();
     
     final androidDetails = AndroidNotificationDetails(
-      'mozechat_messages_channel_v4',
+      'mozechat_messages_channel_v7',
       'Mesaj Bildirimleri',
       channelDescription: 'Yeni mesaj geldiğinde bildirim gönderir.',
       importance: Importance.max,
@@ -113,8 +113,8 @@ class NotificationService {
       visibility: NotificationVisibility.public,
       category: AndroidNotificationCategory.message,
       ticker: 'ticker',
+      fullScreenIntent: true,
       playSound: soundsEnabled,
-      sound: const RawResourceAndroidNotificationSound('gtanotification'),
       actions: const [
         AndroidNotificationAction(
           'reply_action',
@@ -126,7 +126,6 @@ class NotificationService {
 
     final iosDetails = DarwinNotificationDetails(
       presentSound: soundsEnabled,
-      sound: 'gtanotification.mp3',
     );
 
     final notificationDetails = NotificationDetails(

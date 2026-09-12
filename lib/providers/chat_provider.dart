@@ -2,8 +2,9 @@ import 'dart:async';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:share_plus/share_plus.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:uuid/uuid.dart';
 import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/message.dart';
@@ -137,6 +138,12 @@ class ChatProvider extends ChangeNotifier {
   void setNickname(String name) {
     _nickname = name;
     PreferencesService.saveNickname(name);
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      FirebaseFirestore.instance.collection('users').doc(uid).set({
+        'nickname': name,
+      }, SetOptions(merge: true));
+    }
     notifyListeners();
   }
 

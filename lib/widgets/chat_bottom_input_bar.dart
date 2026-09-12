@@ -164,6 +164,11 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         context.read<ChatProvider>().updateLocalMessageStatus(localId, 'failed');
       }
     }
+    if (mounted) {
+      setState(() {
+        _isBurnMode = false;
+      });
+    }
   }
 
   Future<void> _cancelRecording() async {
@@ -192,6 +197,9 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         if (_isBurnMode) 'burnAfterRead': true,
       },
     );
+    setState(() {
+      _isBurnMode = false;
+    });
     _msgController.clear();
   }
 
