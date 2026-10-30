@@ -774,6 +774,36 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             ),
                           ),
                         ),
+
+                        const SizedBox(height: 28),
+
+                        // Version & mozelabs.com branding
+                        Center(
+                          child: Column(
+                            children: [
+                              Text(
+                                'MOZECHAT v0.1.0',
+                                style: TextStyle(
+                                  fontFamily: 'Courier',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
+                                  color: accentColor.withValues(alpha: 0.7),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Text(
+                                'Developed with precision by mozelabs.com',
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: Colors.white.withValues(alpha: 0.45),
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 16),
                       ],
                     ),
                   ),
