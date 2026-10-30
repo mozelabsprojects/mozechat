@@ -97,7 +97,7 @@ class ChatMessageItem extends StatelessWidget {
       );
     } else {
       bubble = GestureDetector(
-        onLongPress: onLongPress,
+        onLongPress: chatProvider.tapToRevealEnabled ? null : onLongPress,
         onDoubleTap: () {
           HapticFeedback.mediumImpact();
           chatProvider.reactToMessage(msg.id, '🛡️');

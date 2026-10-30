@@ -238,6 +238,8 @@ class PreferencesService {
     await prefs.setBool(_tapToRevealKey, enabled);
   }
 
+  static const String _languageKey = 'app_language_code';
+
   static Future<bool> getPanicCamouflageEnabled() async {
     final prefs = await _getPrefs();
     return prefs.getBool(_panicCamouflageKey) ?? false;
@@ -246,5 +248,15 @@ class PreferencesService {
   static Future<void> savePanicCamouflageEnabled(bool enabled) async {
     final prefs = await _getPrefs();
     await prefs.setBool(_panicCamouflageKey, enabled);
+  }
+
+  static Future<String> getLanguage() async {
+    final prefs = await _getPrefs();
+    return prefs.getString(_languageKey) ?? 'tr';
+  }
+
+  static Future<void> saveLanguage(String langCode) async {
+    final prefs = await _getPrefs();
+    await prefs.setString(_languageKey, langCode);
   }
 }

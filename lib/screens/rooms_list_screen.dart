@@ -17,9 +17,9 @@ import '../services/crypto_service.dart';
 import '../services/preferences_service.dart';
 import '../services/update_service.dart';
 import '../providers/chat_provider.dart';
+import '../providers/locale_provider.dart';
 import 'login_screen.dart';
 import 'chat_screen.dart';
-import 'room_screen.dart';
 import 'settings_screen.dart';
 import 'qr_scanner_screen.dart';
 import 'panic_camouflage_screen.dart';
@@ -40,6 +40,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   String _searchQuery = '';
   Set<String> _pinnedCodes = {};
   final Map<String, String> _roomAliases = {};
+  final Map<String, String> _roomIdToRealCode = {};
   bool _isNavigating = false;
   String? _navigatingRoomCode;
 
@@ -101,6 +102,32 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
 
   Future<void> _loadLocalSettings() async {
     final pinned = await PreferencesService.getPinnedRooms();
+    final history = await PreferencesService.getRoomHistory();
+
+    // Map known real codes to their derived hashes
+    for (final code in history) {
+      final rId = CryptoService.deriveRoomId(code);
+      _roomIdToRealCode[rId] = code;
+      _roomIdToRealCode[code] = code;
+    }
+
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      try {
+        final userRooms = await FirebaseFirestore.instance
+            .collection('users')
+            .doc(uid)
+            .collection('rooms')
+            .get();
+        for (final doc in userRooms.docs) {
+          final code = doc.id;
+          final rId = CryptoService.deriveRoomId(code);
+          _roomIdToRealCode[rId] = code;
+          _roomIdToRealCode[code] = code;
+        }
+      } catch (_) {}
+    }
+
     if (mounted) {
       setState(() {
         _pinnedCodes = pinned.toSet();
@@ -125,22 +152,143 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
     );
 
     if (scannedCode != null && scannedCode.isNotEmpty && mounted) {
-      final chatProvider = context.read<ChatProvider>();
-      final success = await chatProvider.joinRoom(scannedCode);
-      if (success && mounted) {
-        Navigator.push(
-          context,
-          MaterialPageRoute(builder: (_) => const ChatScreen()),
-        );
-      } else if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(chatProvider.errorMessage ?? "Odaya katılınamadı."),
-            backgroundColor: Colors.red.shade900,
-          ),
-        );
-      }
+      _handleRoomTap(scannedCode);
     }
+  }
+
+  void _showNewRoomModal(Color accentColor) {
+    final strings = context.read<LocaleProvider>().strings;
+    final codeCtrl = TextEditingController();
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Padding(
+        padding: EdgeInsets.only(bottom: MediaQuery.of(ctx).viewInsets.bottom),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+          decoration: BoxDecoration(
+            color: const Color(0xFF101216),
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(24)),
+            border: Border.all(color: accentColor.withValues(alpha: 0.3), width: 1),
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.white24,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Icon(Icons.shield_outlined, color: accentColor, size: 22),
+                  const SizedBox(width: 10),
+                  Text(
+                    strings.newRoomModalTitle,
+                    style: TextStyle(
+                      fontFamily: 'Courier',
+                      fontSize: 14,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.5,
+                      color: accentColor,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                strings.newRoomModalSubtitle,
+                style: const TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                decoration: BoxDecoration(
+                  color: Colors.black45,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: accentColor.withValues(alpha: 0.4)),
+                ),
+                child: TextField(
+                  controller: codeCtrl,
+                  style: const TextStyle(color: Colors.white, fontFamily: 'monospace', fontSize: 15),
+                  decoration: InputDecoration(
+                    hintText: strings.roomCodeInputHint,
+                    hintStyle: const TextStyle(color: Colors.white38, fontSize: 13),
+                    border: InputBorder.none,
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                    suffixIcon: IconButton(
+                      icon: Icon(Icons.qr_code_scanner, color: accentColor),
+                      onPressed: () {
+                        Navigator.pop(ctx);
+                        _openQRScanner();
+                      },
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: accentColor,
+                        side: BorderSide(color: accentColor.withValues(alpha: 0.5)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                      icon: const Icon(Icons.shuffle, size: 16),
+                      label: Text(
+                        strings.generateSecureCode,
+                        style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                      ),
+                      onPressed: () {
+                        final newCode = CryptoService.generateSecureRoomCode();
+                        codeCtrl.text = newCode;
+                        CyberHUD.show(context, message: strings.roomCreatedToast);
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: accentColor,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                  ),
+                  onPressed: () {
+                    final code = codeCtrl.text.trim();
+                    if (code.isEmpty) {
+                      CyberHUD.show(context, message: strings.enterCodeWarning, isError: true);
+                      return;
+                    }
+                    Navigator.pop(ctx);
+                    _handleRoomTap(code);
+                  },
+                  child: Text(
+                    strings.joinRoom,
+                    style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showQROptions(Color accentColor) {
@@ -413,6 +561,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final accentColor = themeProvider.accentColor;
+    final strings = context.watch<LocaleProvider>().strings;
     final currentUser = FirebaseAuth.instance.currentUser;
     
     if (currentUser == null) {
@@ -432,7 +581,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
               Icon(Icons.shield_outlined, color: accentColor, size: 20),
               const SizedBox(width: 10),
               Text(
-                'SOHBETLER',
+                strings.chats,
                 style: TextStyle(
                   fontWeight: FontWeight.bold,
                   letterSpacing: 2,
@@ -460,7 +609,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                     autofocus: true,
                     style: const TextStyle(color: Colors.white, fontSize: 14),
                     decoration: InputDecoration(
-                      hintText: 'Sohbet veya kod ara...',
+                      hintText: strings.searchPlaceholder,
                       hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.35), fontSize: 13),
                       border: InputBorder.none,
                       isDense: true,
@@ -653,23 +802,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
         ],
       ),
       floatingActionButton: BouncyTap(
-        onTap: () {
-          Navigator.push(
-            context,
-            PageRouteBuilder(
-              transitionDuration: const Duration(milliseconds: 240),
-              reverseTransitionDuration: const Duration(milliseconds: 200),
-              pageBuilder: (context, anim, secondaryAnim) => const RoomScreen(),
-              transitionsBuilder: (context, anim, secondaryAnim, child) {
-                final curved = CurvedAnimation(parent: anim, curve: Curves.easeOutCubic);
-                return SlideTransition(
-                  position: Tween<Offset>(begin: const Offset(0.06, 0.0), end: Offset.zero).animate(curved),
-                  child: FadeTransition(opacity: curved, child: child),
-                );
-              },
-            ),
-          );
-        },
+        onTap: () => _showNewRoomModal(accentColor),
         child: Container(
           width: 56,
           height: 56,
@@ -711,10 +844,11 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   }
 
   Widget _buildFilterPills(Color accentColor) {
+    final strings = context.watch<LocaleProvider>().strings;
     final filters = [
-      {'type': RoomFilterType.all, 'label': 'TÜMÜ', 'icon': null},
-      {'type': RoomFilterType.pinned, 'label': 'SABİTLER', 'icon': Icons.push_pin_rounded},
-      {'type': RoomFilterType.groups, 'label': 'GRUPLAR', 'icon': Icons.groups_rounded},
+      {'type': RoomFilterType.all, 'label': strings.all, 'icon': null},
+      {'type': RoomFilterType.pinned, 'label': strings.pinned, 'icon': Icons.push_pin_rounded},
+      {'type': RoomFilterType.groups, 'label': strings.groups, 'icon': Icons.groups_rounded},
     ];
 
     return Padding(
@@ -877,12 +1011,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
               )
             else
               BouncyTap(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (_) => const RoomScreen()),
-                  );
-                },
+                onTap: () => _showNewRoomModal(accentColor),
                 child: Container(
                   padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
                   decoration: BoxDecoration(
@@ -924,10 +1053,26 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   Widget _buildRoomList(List<QueryDocumentSnapshot> rawDocs, User currentUser, ThemeProvider themeProvider, BuildContext context) {
     final accentColor = themeProvider.accentColor;
 
-    // 1. Map to RoomModel and load aliases asynchronously
+    // 1. Map to RoomModel and resolve true roomCode for decryption & message listening
     final roomsWithDocs = rawDocs.map((doc) {
-      final room = RoomModel.fromMap(doc.data() as Map<String, dynamic>);
-      final targetCode = room.roomCode.isNotEmpty ? room.roomCode : room.roomId;
+      final data = doc.data() as Map<String, dynamic>;
+      final room = RoomModel.fromMap(data);
+
+      String targetCode = (data['roomCode'] as String?) ?? room.roomCode;
+      if (targetCode.isEmpty || targetCode == doc.id) {
+        if (_roomIdToRealCode.containsKey(doc.id)) {
+          targetCode = _roomIdToRealCode[doc.id]!;
+          // Firestore dökümanını otomatik onar ki bir daha kaybolmasın
+          doc.reference.update({'roomCode': targetCode}).catchError((_) {});
+        } else {
+          targetCode = room.roomCode.isNotEmpty ? room.roomCode : doc.id;
+        }
+      } else {
+        final rId = CryptoService.deriveRoomId(targetCode);
+        _roomIdToRealCode[rId] = targetCode;
+        _roomIdToRealCode[doc.id] = targetCode;
+      }
+
       _loadAliasForRoom(targetCode);
       return {'doc': doc, 'room': room, 'code': targetCode};
     }).toList();

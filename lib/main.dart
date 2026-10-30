@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/theme_provider.dart';
+import 'providers/locale_provider.dart';
 import 'screens/login_screen.dart';
 import 'screens/rooms_list_screen.dart';
 import 'screens/chat_screen.dart';
@@ -211,6 +212,9 @@ void main() async {
         ChangeNotifierProvider(
           create: (_) => CallProvider(),
           lazy: false,
+        ),
+        ChangeNotifierProvider(
+          create: (_) => LocaleProvider(),
         ),
       ],
       child: MozechatApp(initialRoom: initialRoom),

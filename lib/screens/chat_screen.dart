@@ -7,6 +7,7 @@ import 'package:screenshot_callback/screenshot_callback.dart';
 
 import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import '../widgets/matrix_background.dart';
 import '../models/message.dart';
 import '../utils/color_utils.dart';
@@ -69,6 +70,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         );
       }
     });
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      final chatProvider = context.read<ChatProvider>();
+      if (chatProvider.tapToRevealEnabled) {
+        final strings = context.read<LocaleProvider>().strings;
+        CyberHUD.show(context, message: strings.tapToRevealHintBubble);
+      }
+    });
   }
 
   @override
@@ -127,6 +137,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _showMessageOptions(BuildContext context, dynamic msg, bool isMe) {
+    final strings = context.read<LocaleProvider>().strings;
+
     if (msg.isDeleted) {
       showModalBottomSheet(
         context: context,
@@ -136,9 +148,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             children: [
               ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.red),
-                title: const Text(
-                  'Delete Permanently',
-                  style: TextStyle(color: Colors.red),
+                title: Text(
+                  strings.isTr ? 'Kalıcı Olarak Sil' : 'Delete Permanently',
+                  style: const TextStyle(color: Colors.red),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -178,9 +190,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   Icons.check_box_outlined,
                   color: Colors.blueAccent,
                 ),
-                title: const Text(
-                  'Select Messages',
-                  style: TextStyle(color: Colors.white),
+                title: Text(
+                  strings.isTr ? 'Mesajları Seç' : 'Select Messages',
+                  style: const TextStyle(color: Colors.white),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -195,7 +207,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   color: Colors.yellow,
                 ),
                 title: Text(
-                  msg.isStarred ? 'Remove Star' : 'Star Message',
+                  msg.isStarred ? strings.unstar : strings.star,
                   style: const TextStyle(color: Colors.white),
                 ),
                 onTap: () {
@@ -209,9 +221,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (isMe && msg.type == 'text')
                 ListTile(
                   leading: const Icon(Icons.edit, color: Colors.blueAccent),
-                  title: const Text(
-                    'Edit Message',
-                    style: TextStyle(color: Colors.white),
+                  title: Text(
+                    strings.isTr ? 'Mesajı Düzenle' : 'Edit Message',
+                    style: const TextStyle(color: Colors.white),
                   ),
                   onTap: () {
                     Navigator.pop(ctx);
@@ -235,9 +247,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               if (isMe)
                 ListTile(
                   leading: const Icon(Icons.delete, color: Colors.red),
-                  title: const Text(
-                    'Delete',
-                    style: TextStyle(color: Colors.red),
+                  title: Text(
+                    strings.delete,
+                    style: const TextStyle(color: Colors.red),
                   ),
                   onTap: () {
                     Navigator.pop(ctx);

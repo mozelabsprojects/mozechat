@@ -10,6 +10,7 @@ import 'package:connectivity_plus/connectivity_plus.dart';
 import '../models/message.dart';
 import '../repositories/chat_repository.dart';
 import '../services/e2ee_service.dart';
+import '../services/crypto_service.dart';
 import '../services/preferences_service.dart';
 import '../services/notification_service.dart';
 import '../services/bot_service.dart';
@@ -335,7 +336,19 @@ class ChatProvider extends ChangeNotifier {
 
   Future<bool> joinRoom(String code) async {
     try {
-      _roomCode = code;
+      String resolvedCode = code.trim();
+      // If code is a 64-character SHA-256 derived hash, resolve actual roomCode from history
+      if (resolvedCode.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(resolvedCode)) {
+        final history = await PreferencesService.getRoomHistory();
+        for (final hCode in history) {
+          if (CryptoService.deriveRoomId(hCode) == resolvedCode) {
+            resolvedCode = hCode;
+            break;
+          }
+        }
+      }
+
+      _roomCode = resolvedCode;
       _firestoreMessages = [];
       _localMessages = [];
       _cachedMessages = null;
@@ -344,9 +357,9 @@ class ChatProvider extends ChangeNotifier {
       final isOffline = connectivity.contains(ConnectivityResult.none);
       
       if (!isOffline) {
-        await _repository.joinOrCreateRoom(code);
+        await _repository.joinOrCreateRoom(resolvedCode);
         
-        final doc = await _repository.getRoomMetadata(code);
+        final doc = await _repository.getRoomMetadata(resolvedCode);
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>? ?? {};
           final notesData = data['notes'] as List<dynamic>? ?? [];
@@ -356,11 +369,11 @@ class ChatProvider extends ChangeNotifier {
       _roomJoinTime = DateTime.now();
 
       // Geçmişe ekle
-      await PreferencesService.addRoomToHistory(code);
-      await PreferencesService.saveLastActiveRoom(code);
+      await PreferencesService.addRoomToHistory(resolvedCode);
+      await PreferencesService.saveLastActiveRoom(resolvedCode);
 
-      NotificationService.currentActiveRoomCode = code;
-      NotificationService.clearNotificationsForRoom(code);
+      NotificationService.currentActiveRoomCode = resolvedCode;
+      NotificationService.clearNotificationsForRoom(resolvedCode);
 
       _listenToRoom();
       _listenToMessages();

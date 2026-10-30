@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/crypto_service.dart';
 
 import 'rooms_list_screen.dart';
@@ -255,6 +256,44 @@ class _LoginScreenState extends State<LoginScreen>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
+                        // Language quick switch
+                        Consumer<LocaleProvider>(
+                          builder: (context, localeProv, _) {
+                            return Align(
+                              alignment: Alignment.topRight,
+                              child: InkWell(
+                                onTap: () {
+                                  localeProv.setLanguage(localeProv.isTurkish ? 'en' : 'tr');
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                  decoration: BoxDecoration(
+                                    color: Colors.black45,
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(Icons.language, color: accentColor, size: 12),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        localeProv.isTurkish ? 'TR 🇹🇷' : 'EN 🇺🇸',
+                                        style: TextStyle(
+                                          color: accentColor,
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 8),
                         // Logo / Header
                         Center(
                           child: AnimatedBuilder(

@@ -6,10 +6,11 @@ import 'package:intl/intl.dart';
 import '../providers/chat_provider.dart';
 import '../utils/color_utils.dart';
 import '../screens/media_gallery_screen.dart';
-import '../screens/room_screen.dart';
+import '../screens/rooms_list_screen.dart';
 import '../screens/call_screen.dart';
 import '../screens/panic_camouflage_screen.dart';
 import '../providers/call_provider.dart';
+import '../providers/locale_provider.dart';
 import 'qr_dialog.dart';
 import 'bouncy_tap.dart';
 
@@ -43,6 +44,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
+    final strings = context.watch<LocaleProvider>().strings;
     final appBgColor = Theme.of(context).scaffoldBackgroundColor;
     final topBarTextColor = getContrastColor(appBgColor);
 
@@ -102,12 +104,12 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
                 Text(
                   chatProvider.isOtherTyping
-                      ? 'yazıyor...'
+                      ? strings.typing
                       : (chatProvider.isOtherOnline
-                          ? 'çevrimiçi'
+                          ? strings.online
                           : (chatProvider.otherLastSeen != null
-                              ? 'son görülme: ${_formatLastSeen(chatProvider.otherLastSeen!)}'
-                              : 'çevrimdışı')),
+                              ? 'Last seen: ${_formatLastSeen(chatProvider.otherLastSeen!)}'
+                              : strings.offline)),
                   style: TextStyle(
                     fontSize: 12,
                     color: chatProvider.isOtherTyping
@@ -202,7 +204,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     chatProvider.leaveRoom();
                     Navigator.pushAndRemoveUntil(
                       context,
-                      MaterialPageRoute(builder: (_) => const RoomScreen()),
+                      MaterialPageRoute(builder: (_) => const RoomsListScreen()),
                       (route) => false,
                     );
                   } else if (value == 'gallery') {
@@ -223,52 +225,52 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                   }
                 },
                 itemBuilder: (BuildContext context) => [
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'leave',
                     child: ListTile(
-                      leading: Icon(
+                      leading: const Icon(
                         Icons.exit_to_app,
                         color: Colors.redAccent,
                       ),
                       title: Text(
-                        'Leave Node',
-                        style: TextStyle(color: Colors.redAccent),
+                        strings.leaveRoom,
+                        style: const TextStyle(color: Colors.redAccent),
                       ),
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'gallery',
                     child: ListTile(
-                      leading: Icon(Icons.photo_library),
-                      title: Text('Media Gallery'),
+                      leading: const Icon(Icons.photo_library),
+                      title: Text(strings.mediaGallery),
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'export',
                     child: ListTile(
-                      leading: Icon(Icons.download),
-                      title: Text('Export Chat'),
+                      leading: const Icon(Icons.download),
+                      title: Text(strings.exportChat),
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'settings',
                     child: ListTile(
-                      leading: Icon(Icons.settings),
-                      title: Text('Settings'),
+                      leading: const Icon(Icons.settings),
+                      title: Text(strings.settingsTitle),
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'commands',
                     child: ListTile(
-                      leading: Icon(Icons.menu_book),
-                      title: Text('Commands'),
+                      leading: const Icon(Icons.menu_book),
+                      title: Text(strings.commands),
                     ),
                   ),
-                  const PopupMenuItem(
+                  PopupMenuItem(
                     value: 'copy',
                     child: ListTile(
-                      leading: Icon(Icons.copy),
-                      title: Text('Copy Node Code'),
+                      leading: const Icon(Icons.copy),
+                      title: Text(strings.copyRoomCode),
                     ),
                   ),
                 ],

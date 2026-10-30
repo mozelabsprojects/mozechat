@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/chat_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/preferences_service.dart';
 import '../services/update_service.dart';
 import '../services/audio_service.dart';
@@ -138,6 +139,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
     final accentColor = themeProvider.accentColor;
+    final localeProvider = context.watch<LocaleProvider>();
+    final strings = localeProvider.strings;
 
     return Scaffold(
       extendBodyBehindAppBar: true,
@@ -151,7 +154,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
             Icon(Icons.settings_outlined, color: accentColor, size: 20),
             const SizedBox(width: 10),
             Text(
-              'SYSTEM CONFIG',
+              strings.settingsTitle,
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 letterSpacing: 3,
@@ -286,7 +289,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       // Robotic Anonymous Voice
                                       SwitchListTile(
                                         title: Text(
-                                          'ROBOTİK SES FİLTRESİ',
+                                          strings.anonymousVoiceTitle,
                                           style: TextStyle(
                                             color: accentColor,
                                             fontWeight: FontWeight.bold,
@@ -295,7 +298,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           ),
                                         ),
                                         subtitle: Text(
-                                          'Ses kayıtlarını robotik tonda şifreler, ses kimliğinizi gizler.',
+                                          strings.anonymousVoiceSubtitle,
                                           style: TextStyle(
                                             color: Colors.white.withValues(alpha: 0.5),
                                             fontSize: 10,
@@ -312,7 +315,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       // Tap to reveal
                                       SwitchListTile(
                                         title: Text(
-                                          'GİZLİLİK MASKESİ (TAP-TO-REVEAL)',
+                                          strings.tapToRevealTitle,
                                           style: TextStyle(
                                             color: accentColor,
                                             fontWeight: FontWeight.bold,
@@ -321,7 +324,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           ),
                                         ),
                                         subtitle: Text(
-                                          'Mesajları buğular, yalnızca üzerine basılı tuttuğunuzda gösterir.',
+                                          strings.tapToRevealSubtitle,
                                           style: TextStyle(
                                             color: Colors.white.withValues(alpha: 0.5),
                                             fontSize: 10,
@@ -332,13 +335,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         inactiveTrackColor: Colors.black45,
                                         onChanged: (value) {
                                           chatProvider.toggleTapToReveal(value);
+                                          if (value && mounted) {
+                                            CyberHUD.show(
+                                              context,
+                                              message: strings.tapToRevealActiveToast,
+                                            );
+                                          }
                                         },
                                       ),
                                       Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
                                       // Panic camouflage
                                       SwitchListTile(
                                         title: Text(
-                                          'PANİK KAMUFLAJ MODU',
+                                          strings.panicTitle,
                                           style: TextStyle(
                                             color: accentColor,
                                             fontWeight: FontWeight.bold,
@@ -347,7 +356,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                           ),
                                         ),
                                         subtitle: Text(
-                                          'Üst bardaki kalkan butonuyla anında çalışan sahte hesap makinesine geçer.',
+                                          strings.panicSubtitle,
                                           style: TextStyle(
                                             color: Colors.white.withValues(alpha: 0.5),
                                             fontSize: 10,
@@ -365,6 +374,92 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 },
                               ),
                             ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Language Section
+                        Row(
+                          children: [
+                            Icon(Icons.language_rounded, color: accentColor, size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              strings.languageSection,
+                              style: TextStyle(
+                                color: accentColor.withValues(alpha: 0.5),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: accentColor.withValues(alpha: 0.3)),
+                          ),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  localeProvider.isTurkish ? 'Mevcut Dil: Türkçe 🇹🇷' : 'Current Language: English 🇺🇸',
+                                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: Colors.black45,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: accentColor.withValues(alpha: 0.4)),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    InkWell(
+                                      onTap: () => localeProvider.setLanguage('tr'),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: localeProvider.isTurkish ? accentColor.withValues(alpha: 0.25) : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'TR 🇹🇷',
+                                          style: TextStyle(
+                                            color: localeProvider.isTurkish ? accentColor : Colors.white54,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    InkWell(
+                                      onTap: () => localeProvider.setLanguage('en'),
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                        decoration: BoxDecoration(
+                                          color: !localeProvider.isTurkish ? accentColor.withValues(alpha: 0.25) : Colors.transparent,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          'EN 🇺🇸',
+                                          style: TextStyle(
+                                            color: !localeProvider.isTurkish ? accentColor : Colors.white54,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
                         ),
 

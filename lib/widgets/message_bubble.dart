@@ -280,43 +280,12 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                                     onTapCancel: () {
                                       setState(() => _isRevealed = false);
                                     },
-                                    child: Stack(
-                                      alignment: Alignment.center,
-                                      children: [
-                                        ImageFiltered(
-                                          imageFilter: ImageFilter.blur(
-                                            sigmaX: isMasked ? 8 : 0,
-                                            sigmaY: isMasked ? 8 : 0,
-                                          ),
-                                          child: _buildContent(context),
-                                        ),
-                                        if (isMasked)
-                                          Container(
-                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                            decoration: BoxDecoration(
-                                              color: Colors.black.withValues(alpha: 0.8),
-                                              borderRadius: BorderRadius.circular(4),
-                                              border: Border.all(color: widget.textColor.withValues(alpha: 0.5), width: 1),
-                                            ),
-                                            child: Row(
-                                              mainAxisSize: MainAxisSize.min,
-                                              children: [
-                                                Icon(Icons.visibility_off_outlined, color: widget.textColor, size: 12),
-                                                const SizedBox(width: 4),
-                                                Text(
-                                                  'HOLD TO REVEAL',
-                                                  style: TextStyle(
-                                                    color: widget.textColor,
-                                                    fontSize: 10,
-                                                    fontFamily: 'Courier',
-                                                    fontWeight: FontWeight.bold,
-                                                    letterSpacing: 1,
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                      ],
+                                    child: ImageFiltered(
+                                      imageFilter: ImageFilter.blur(
+                                        sigmaX: isMasked ? 9 : 0,
+                                        sigmaY: isMasked ? 9 : 0,
+                                      ),
+                                      child: _buildContent(context),
                                     ),
                                   );
                                 },
