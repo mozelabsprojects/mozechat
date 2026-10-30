@@ -83,7 +83,7 @@ Mozechat, **[mozelabs.com](https://mozelabs.com)** tarafından yüksek gizlilik 
 
 * **Resmi Web Sitesi:** [https://mozelabs.com](https://mozelabs.com)
 * **GitHub Organizasyonu:** [@mozelabsprojects](https://github.com/mozelabsprojects)
-* **Destek & İletişim:** [contact@mozelabs.com](mailto:contact@mozelabs.com)
+* **Destek & İletişim:** [info@mozelabs.com](mailto:info@mozelabs.com)
 
 ---
 
