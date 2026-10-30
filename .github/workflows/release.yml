@@ -57,16 +57,22 @@ jobs:
       - name: Get Dependencies
         run: flutter pub get
 
-      - name: Build APK
-        run: flutter build apk --release
+      - name: Build APK (Split per ABI for lightweight size)
+        run: flutter build apk --release --split-per-abi
 
-      - name: Prepare Release Asset
-        run: cp build/app/outputs/flutter-apk/app-release.apk app-release.apk
+      - name: Prepare Release Assets
+        run: |
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk app-release.apk
+          cp build/app/outputs/flutter-apk/app-arm64-v8a-release.apk app-arm64-v8a-release.apk
+          cp build/app/outputs/flutter-apk/app-armeabi-v7a-release.apk app-armeabi-v7a-release.apk
 
       - name: Create or Update GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          files: app-release.apk
+          files: |
+            app-release.apk
+            app-arm64-v8a-release.apk
+            app-armeabi-v7a-release.apk
           name: Mozechat ${{ steps.get_version.outputs.tag }}
           tag_name: ${{ steps.get_version.outputs.tag }}
           draft: false
