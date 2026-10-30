@@ -1,0 +1,75 @@
+name: Build & Release APK
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Release version (e.g. 0.1.1)'
+        required: false
+        default: ''
+
+jobs:
+  build:
+    name: Build Release APK
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Extract Version from pubspec.yaml
+        id: get_version
+        run: |
+          PUB_VER=$(grep '^version:' pubspec.yaml | cut -d ' ' -f 2 | cut -d '+' -f 1 | tr -d '\r\n')
+          INPUT_VER="${{ github.event.inputs.version }}"
+          REF_VER="${{ github.ref_name }}"
+          
+          if [ -n "$INPUT_VER" ]; then
+            TAG="v$INPUT_VER"
+          elif [[ "$REF_VER" == v* ]]; then
+            TAG="$REF_VER"
+          else
+            TAG="v$PUB_VER"
+          fi
+          
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$PUB_VER" >> $GITHUB_OUTPUT
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+
+      - name: Set up Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: 'stable'
+          cache: true
+
+      - name: Get Dependencies
+        run: flutter pub get
+
+      - name: Build APK
+        run: flutter build apk --release
+
+      - name: Prepare Release Asset
+        run: cp build/app/outputs/flutter-apk/app-release.apk app-release.apk
+
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: app-release.apk
+          name: Mozechat ${{ steps.get_version.outputs.tag }}
+          tag_name: ${{ steps.get_version.outputs.tag }}
+          draft: false
+          prerelease: false
+          generate_release_notes: true
+

@@ -9,18 +9,42 @@ class AudioCacheService {
 
   static Future<File?> getCachedAudio(String url) async {
     try {
+      if (url.startsWith('/') || url.startsWith('file://')) {
+        final path = url.replaceFirst('file://', '');
+        final localFile = File(path);
+        if (await localFile.exists()) return localFile;
+      }
       final cacheDir = await _getCacheDir();
       final hash = md5.convert(utf8.encode(url)).toString();
       final file = File('${cacheDir.path}/$hash.m4a');
 
       if (await file.exists()) {
-        // Update modified time for LRU
-        await file.setLastModified(DateTime.now());
-        return file;
+        if (await file.length() > 0) {
+          // Update modified time for LRU
+          await file.setLastModified(DateTime.now());
+          return file;
+        } else {
+          try {
+            await file.delete();
+          } catch (_) {}
+        }
       }
       return null;
     } catch (e) {
       return null;
+    }
+  }
+
+  static Future<void> cacheExistingFile(String url, File sourceFile) async {
+    try {
+      if (!await sourceFile.exists() || await sourceFile.length() == 0) return;
+      final cacheDir = await _getCacheDir();
+      final hash = md5.convert(utf8.encode(url)).toString();
+      final targetFile = File('${cacheDir.path}/$hash.m4a');
+      await sourceFile.copy(targetFile.path);
+      _enforceLRU(cacheDir);
+    } catch (e) {
+      // Ignore
     }
   }
 
@@ -31,16 +55,28 @@ class AudioCacheService {
       final file = File('${cacheDir.path}/$hash.m4a');
 
       if (await file.exists()) {
-        await file.setLastModified(DateTime.now());
-        return file;
+        if (await file.length() > 0) {
+          await file.setLastModified(DateTime.now());
+          return file;
+        } else {
+          try {
+            await file.delete();
+          } catch (_) {}
+        }
       }
 
       final dio = Dio();
       await dio.download(url, file.path);
       
-      _enforceLRU(cacheDir);
-
-      return file;
+      if (await file.exists() && await file.length() > 0) {
+        _enforceLRU(cacheDir);
+        return file;
+      } else {
+        try {
+          if (await file.exists()) await file.delete();
+        } catch (_) {}
+        return null;
+      }
     } catch (e) {
       return null;
     }

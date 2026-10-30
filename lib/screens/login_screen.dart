@@ -7,7 +7,7 @@ import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/crypto_service.dart';
 
-import 'room_screen.dart';
+import 'rooms_list_screen.dart';
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen>
       if (chatProvider.errorMessage == null && mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (_) => const RoomScreen()),
+          MaterialPageRoute(builder: (_) => const RoomsListScreen()),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -167,7 +167,7 @@ class _LoginScreenState extends State<LoginScreen>
                 Navigator.of(ctx).pop();
                 Navigator.pushReplacement(
                   context,
-                  MaterialPageRoute(builder: (_) => const RoomScreen()),
+                  MaterialPageRoute(builder: (_) => const RoomsListScreen()),
                 );
               },
               child: Text(

@@ -4,6 +4,7 @@ import 'package:permission_handler/permission_handler.dart';
 import '../services/webrtc_service.dart';
 import '../services/callkit_service.dart';
 import '../services/preferences_service.dart';
+import '../services/crypto_service.dart';
 import '../repositories/chat_repository.dart';
 import '../main.dart';
 import '../screens/call_screen.dart';
@@ -40,10 +41,23 @@ class CallProvider extends ChangeNotifier {
       await [Permission.microphone].request();
       _isInCall = true;
       _callStartTime = DateTime.now();
-      _currentRoomCode = roomId;
+
+      // Resolve raw roomCode from history if roomId was passed as a 64-char hash
+      String resolvedCode = roomId;
+      if (roomId.length == 64) {
+        final history = await PreferencesService.getRoomHistory();
+        for (var code in history) {
+          if (CryptoService.deriveRoomId(code) == roomId) {
+            resolvedCode = code;
+            break;
+          }
+        }
+      }
+
+      _currentRoomCode = resolvedCode;
       _currentUserNickname = await PreferencesService.getNickname() ?? 'Unknown';
       notifyListeners();
-      await _webRTCService.joinCall(roomId, callId, offer);
+      await _webRTCService.joinCall(resolvedCode, callId, offer);
       _localStream = _webRTCService.localStream;
       _isSpeaker = false;
       _webRTCService.toggleSpeaker(_isSpeaker);

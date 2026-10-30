@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:intl/intl.dart';
@@ -43,6 +44,7 @@ class MessageBubble extends StatefulWidget {
 class _MessageBubbleState extends State<MessageBubble> with SingleTickerProviderStateMixin {
   Timer? _burnTimer;
   int _timeLeft = 10;
+  bool _isRevealed = false;
   late AnimationController _burnAnimController;
   late Animation<double> _burnScale;
   late Animation<double> _burnOpacity;
@@ -101,16 +103,16 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
 
     switch (widget.msg.status) {
       case 'pending':
-        statusWidget = Text('...', style: TextStyle(color: widget.textColor.withValues(alpha: 0.5), fontSize: 10, fontWeight: FontWeight.bold));
+        statusWidget = Icon(Icons.access_time_rounded, size: 11, color: widget.textColor.withValues(alpha: 0.5));
         break;
       case 'failed':
-        statusWidget = Text('[ERR]', style: TextStyle(color: Colors.redAccent, fontSize: 10, fontWeight: FontWeight.bold));
+        statusWidget = const Icon(Icons.error_outline_rounded, size: 13, color: Colors.redAccent);
         break;
       case 'sent':
-        statusWidget = Text('•', style: TextStyle(color: widget.textColor.withValues(alpha: 0.5), fontSize: 14, fontWeight: FontWeight.bold));
+        statusWidget = Icon(Icons.check_rounded, size: 14, color: widget.textColor.withValues(alpha: 0.6));
         break;
       case 'delivered':
-        statusWidget = Text('••', style: TextStyle(color: const Color(0xFF159D87), fontSize: 14, fontWeight: FontWeight.bold));
+        statusWidget = Icon(Icons.done_all_rounded, size: 14, color: widget.textColor.withValues(alpha: 0.6));
         break;
       case 'read':
         statusWidget = Row(
@@ -121,20 +123,17 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                 padding: const EdgeInsets.only(right: 4.0),
                 child: Text('🔥$_timeLeft', style: const TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
               ),
-            Text(
-              '••', 
-              style: const TextStyle(
-                color: Colors.cyanAccent, 
-                fontSize: 14, 
-                fontWeight: FontWeight.bold,
-                shadows: [Shadow(color: Colors.cyanAccent, blurRadius: 10)]
-              )
+            const Icon(
+              Icons.done_all_rounded, 
+              size: 14, 
+              color: Colors.cyanAccent,
+              shadows: [Shadow(color: Colors.cyanAccent, blurRadius: 8)],
             ),
           ],
         );
         break;
       default:
-        statusWidget = Text('•', style: TextStyle(color: widget.textColor.withValues(alpha: 0.5), fontSize: 14, fontWeight: FontWeight.bold));
+        statusWidget = Icon(Icons.check_rounded, size: 14, color: widget.textColor.withValues(alpha: 0.6));
     }
 
     return Padding(
@@ -178,10 +177,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               child: Container(
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.only(
-                    topLeft: const Radius.circular(2),
-                    topRight: const Radius.circular(12),
-                    bottomLeft: widget.isMe ? const Radius.circular(12) : Radius.zero,
-                    bottomRight: widget.isMe ? Radius.zero : const Radius.circular(12),
+                    topLeft: widget.isMe ? const Radius.circular(16) : const Radius.circular(4),
+                    topRight: const Radius.circular(16),
+                    bottomLeft: const Radius.circular(16),
+                    bottomRight: widget.isMe ? const Radius.circular(4) : const Radius.circular(16),
                   ),
                   border: Border.all(color: bdrColor, width: 1.5),
                   color: bgColor,
@@ -199,10 +198,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                     Positioned.fill(
                       child: ClipRRect(
                         borderRadius: BorderRadius.only(
-                          topLeft: const Radius.circular(2),
-                          topRight: const Radius.circular(12),
-                          bottomLeft: widget.isMe ? const Radius.circular(12) : Radius.zero,
-                          bottomRight: widget.isMe ? Radius.zero : const Radius.circular(12),
+                          topLeft: widget.isMe ? const Radius.circular(16) : const Radius.circular(4),
+                          topRight: const Radius.circular(16),
+                          bottomLeft: const Radius.circular(16),
+                          bottomRight: widget.isMe ? const Radius.circular(4) : const Radius.circular(16),
                         ),
                         child: widget.isBot
                             ? Container()
@@ -263,7 +262,65 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                           children: [
                             Padding(
                               padding: const EdgeInsets.only(right: 8.0, bottom: 2.0),
-                              child: _buildContent(context),
+                              child: Consumer<ChatProvider>(
+                                builder: (context, chatProv, child) {
+                                  final bool isMasked = chatProv.tapToRevealEnabled && !_isRevealed && !widget.msg.isDeleted;
+                                  if (!chatProv.tapToRevealEnabled || widget.msg.isDeleted) {
+                                    return _buildContent(context);
+                                  }
+
+                                  return GestureDetector(
+                                    onTapDown: (_) {
+                                      HapticFeedback.selectionClick();
+                                      setState(() => _isRevealed = true);
+                                    },
+                                    onTapUp: (_) {
+                                      setState(() => _isRevealed = false);
+                                    },
+                                    onTapCancel: () {
+                                      setState(() => _isRevealed = false);
+                                    },
+                                    child: Stack(
+                                      alignment: Alignment.center,
+                                      children: [
+                                        ImageFiltered(
+                                          imageFilter: ImageFilter.blur(
+                                            sigmaX: isMasked ? 8 : 0,
+                                            sigmaY: isMasked ? 8 : 0,
+                                          ),
+                                          child: _buildContent(context),
+                                        ),
+                                        if (isMasked)
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                            decoration: BoxDecoration(
+                                              color: Colors.black.withValues(alpha: 0.8),
+                                              borderRadius: BorderRadius.circular(4),
+                                              border: Border.all(color: widget.textColor.withValues(alpha: 0.5), width: 1),
+                                            ),
+                                            child: Row(
+                                              mainAxisSize: MainAxisSize.min,
+                                              children: [
+                                                Icon(Icons.visibility_off_outlined, color: widget.textColor, size: 12),
+                                                const SizedBox(width: 4),
+                                                Text(
+                                                  'HOLD TO REVEAL',
+                                                  style: TextStyle(
+                                                    color: widget.textColor,
+                                                    fontSize: 10,
+                                                    fontFamily: 'Courier',
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 1,
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                             ),
                             if (widget.msg.reactions != null && widget.msg.reactions!.isNotEmpty)
                               Padding(
@@ -405,6 +462,8 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             child: CachedNetworkImage(
               imageUrl: widget.msg.mediaUrl!,
               fit: BoxFit.cover,
+              memCacheWidth: 800,
+              maxWidthDiskCache: 1200,
               placeholder: (context, url) => const CircularProgressIndicator(),
               errorWidget: (context, url, error) => const Icon(Icons.error),
             ),
@@ -431,14 +490,15 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             fit: StackFit.expand,
             children: [
               if (widget.msg.thumbnailUrl != null)
-                ImageFiltered(
-                  imageFilter: ImageFilter.blur(sigmaX: 3, sigmaY: 3),
-                  child: CachedNetworkImage(
-                    imageUrl: widget.msg.thumbnailUrl!,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) =>
-                        const Center(child: CircularProgressIndicator()),
-                  ),
+                CachedNetworkImage(
+                  imageUrl: widget.msg.thumbnailUrl!,
+                  fit: BoxFit.cover,
+                  memCacheWidth: 400,
+                  maxWidthDiskCache: 600,
+                  placeholder: (context, url) =>
+                      const Center(child: CircularProgressIndicator()),
+                  errorWidget: (context, url, error) =>
+                      const Center(child: Icon(Icons.videocam, color: Colors.white54, size: 40)),
                 ),
               const Center(
                 child: Icon(
@@ -571,6 +631,8 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                   child: CachedNetworkImage(
                     imageUrl: url,
                     fit: BoxFit.cover,
+                    memCacheWidth: 350,
+                    maxWidthDiskCache: 500,
                     placeholder: (context, url) => const Center(child: CircularProgressIndicator()),
                   ),
                 ),

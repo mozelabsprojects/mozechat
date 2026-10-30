@@ -13,3 +13,15 @@
 # Play Core / Flutter Embedding (Fix R8 Missing Classes)
 -dontwarn com.google.android.play.core.**
 -dontwarn io.flutter.embedding.**
+
+# WebRTC (Prevent JNI runtime crash)
+-keep class org.webrtc.** { *; }
+-dontwarn org.webrtc.**
+
+# Flutter CallKit Incoming
+-keep class com.hiennv.flutter_callkit_incoming.** { *; }
+-dontwarn com.hiennv.flutter_callkit_incoming.**
+
+# Flutter Local Notifications
+-keep class com.dexterous.flutterlocalnotifications.** { *; }
+-dontwarn com.dexterous.flutterlocalnotifications.**

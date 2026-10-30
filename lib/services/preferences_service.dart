@@ -169,4 +169,82 @@ class PreferencesService {
     final prefs = await _getPrefs();
     await prefs.setBool(_notificationSoundKey, enabled);
   }
+
+  // --- PINNED ROOMS & ALIASES ---
+  static const String _pinnedRoomsKey = 'pinned_rooms';
+
+  static Future<List<String>> getPinnedRooms() async {
+    final prefs = await _getPrefs();
+    return prefs.getStringList(_pinnedRoomsKey) ?? [];
+  }
+
+  static Future<bool> togglePinRoom(String roomCode) async {
+    final prefs = await _getPrefs();
+    final list = List<String>.from(prefs.getStringList(_pinnedRoomsKey) ?? []);
+    bool nowPinned;
+    if (list.contains(roomCode)) {
+      list.remove(roomCode);
+      nowPinned = false;
+    } else {
+      list.insert(0, roomCode);
+      nowPinned = true;
+    }
+    await prefs.setStringList(_pinnedRoomsKey, list);
+    return nowPinned;
+  }
+
+  static Future<bool> isRoomPinned(String roomCode) async {
+    final prefs = await _getPrefs();
+    final list = prefs.getStringList(_pinnedRoomsKey) ?? [];
+    return list.contains(roomCode);
+  }
+
+  static Future<String?> getRoomAlias(String roomCode) async {
+    final prefs = await _getPrefs();
+    return prefs.getString('alias_$roomCode');
+  }
+
+  static Future<void> saveRoomAlias(String roomCode, String? alias) async {
+    final prefs = await _getPrefs();
+    if (alias == null || alias.trim().isEmpty) {
+      await prefs.remove('alias_$roomCode');
+    } else {
+      await prefs.setString('alias_$roomCode', alias.trim());
+    }
+  }
+
+  // --- STEALTH & PRIVACY FEATURES ---
+  static const String _anonymousVoiceKey = 'anonymous_voice_enabled';
+  static const String _tapToRevealKey = 'tap_to_reveal_enabled';
+  static const String _panicCamouflageKey = 'panic_camouflage_enabled';
+
+  static Future<bool> getAnonymousVoiceEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_anonymousVoiceKey) ?? false;
+  }
+
+  static Future<void> saveAnonymousVoiceEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_anonymousVoiceKey, enabled);
+  }
+
+  static Future<bool> getTapToRevealEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_tapToRevealKey) ?? false;
+  }
+
+  static Future<void> saveTapToRevealEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_tapToRevealKey, enabled);
+  }
+
+  static Future<bool> getPanicCamouflageEnabled() async {
+    final prefs = await _getPrefs();
+    return prefs.getBool(_panicCamouflageKey) ?? false;
+  }
+
+  static Future<void> savePanicCamouflageEnabled(bool enabled) async {
+    final prefs = await _getPrefs();
+    await prefs.setBool(_panicCamouflageKey, enabled);
+  }
 }

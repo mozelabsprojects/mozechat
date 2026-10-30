@@ -38,6 +38,8 @@
 	<string>Konumunuzu paylaşmak için konum bilgilerinize erişim gereklidir.</string>
 	<key>NSLocationAlwaysUsageDescription</key>
 	<string>Konumunuzu her zaman paylaşmak için konum bilgilerinize erişim gereklidir.</string>
+	<key>NSLocationAlwaysAndWhenInUseUsageDescription</key>
+	<string>Konumunuzu her zaman ve kullanım sırasında paylaşmak için konum bilgilerinize erişim gereklidir.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

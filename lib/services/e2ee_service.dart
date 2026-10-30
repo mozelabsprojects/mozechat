@@ -14,12 +14,18 @@ class E2EEService {
 
   /// Generates a new RSA Keypair, saves private key locally, returns public key as string
   Future<String> initializeKeypair(String uid) async {
-    // Check if we already have a keypair
+    // Check if we already have a keypair to prevent overwriting existing identity
     final existingPrivateKey = await _secureStorage.read(key: 'private_key_$uid');
     if (existingPrivateKey != null) {
-      // If we have it, we don't regenerate. But how do we return public key?
-      // For simplicity, we just assume if private exists, public is already in Firestore.
-      // But if we need to return it, we can parse it.
+      try {
+        final privKey = RsaKeyHelper().parsePrivateKeyFromPem(existingPrivateKey);
+        if (privKey.modulus != null && privKey.publicExponent != null) {
+          final pubKey = RSAPublicKey(privKey.modulus!, privKey.publicExponent!);
+          return RsaKeyHelper().encodePublicKeyToPemPKCS1(pubKey);
+        }
+      } catch (e) {
+        // Fallback to regenerate if corrupt
+      }
     }
 
     // Generate new keypair

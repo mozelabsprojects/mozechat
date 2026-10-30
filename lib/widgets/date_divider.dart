@@ -1,6 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import '../utils/color_utils.dart';
+import 'package:provider/provider.dart';
+import '../providers/theme_provider.dart';
 
 class DateDivider extends StatelessWidget {
   final DateTime date;
@@ -13,12 +15,12 @@ class DateDivider extends StatelessWidget {
     final yesterday = today.subtract(const Duration(days: 1));
     final msgDate = DateTime(date.year, date.month, date.day);
 
-    if (msgDate == today) return "Today";
-    if (msgDate == yesterday) return "Yesterday";
+    if (msgDate == today) return "BUGÜN";
+    if (msgDate == yesterday) return "DÜN";
 
     final diff = today.difference(msgDate).inDays;
     if (diff < 7) {
-      return DateFormat('EEEE').format(date); // Monday, Tuesday, etc.
+      return DateFormat('EEEE').format(date).toUpperCase();
     }
 
     return DateFormat('dd.MM.yyyy').format(date);
@@ -26,21 +28,58 @@ class DateDivider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final cardColor = Theme.of(context).cardColor;
-    
-    return Container(
-      margin: const EdgeInsets.symmetric(vertical: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-      decoration: BoxDecoration(
-        color: cardColor.withValues(alpha: 0.6),
-        borderRadius: BorderRadius.circular(12),
-      ),
-      child: Text(
-        _getDateDividerText(date),
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.bold,
-          color: getContrastColor(cardColor).withValues(alpha: 0.8),
+    final themeProvider = context.watch<ThemeProvider>();
+    final accent = themeProvider.accentColor;
+
+    return Center(
+      child: Container(
+        margin: const EdgeInsets.symmetric(vertical: 14),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(20),
+          child: BackdropFilter(
+            filter: ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 5),
+              decoration: BoxDecoration(
+                color: Colors.black.withValues(alpha: 0.65),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(
+                  color: accent.withValues(alpha: 0.25),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: accent.withValues(alpha: 0.05),
+                    blurRadius: 10,
+                  ),
+                ],
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 4,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      color: accent,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    '// ${_getDateDividerText(date)} //',
+                    style: TextStyle(
+                      fontSize: 10,
+                      fontWeight: FontWeight.bold,
+                      color: accent.withValues(alpha: 0.8),
+                      letterSpacing: 2,
+                      fontFamily: 'Courier',
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ),
       ),
     );

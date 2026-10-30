@@ -12,32 +12,35 @@ class CallScreen extends StatefulWidget {
 
 class _CallScreenState extends State<CallScreen> {
   final RTCVideoRenderer _remoteRenderer = RTCVideoRenderer();
-  late CallProvider _callProvider;
+  CallProvider? _callProvider;
   
   @override
   void initState() {
     super.initState();
     _initRenderers();
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        _callProvider = context.read<CallProvider>();
-        _callProvider.addListener(_onCallStateChanged);
-      }
-    });
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_callProvider == null) {
+      _callProvider = context.read<CallProvider>();
+      _callProvider!.addListener(_onCallStateChanged);
+    }
   }
 
   bool _hasPopped = false;
 
   void _onCallStateChanged() {
-    if (!mounted || _hasPopped) return;
+    if (!mounted || _hasPopped || _callProvider == null) return;
     
-    if (!_callProvider.isInCall) {
+    if (!_callProvider!.isInCall) {
       _hasPopped = true;
       Navigator.of(context).pop();
     } else {
-      if (_callProvider.remoteStream != null && _remoteRenderer.srcObject != _callProvider.remoteStream) {
+      if (_callProvider!.remoteStream != null && _remoteRenderer.srcObject != _callProvider!.remoteStream) {
         setState(() {
-          _remoteRenderer.srcObject = _callProvider.remoteStream;
+          _remoteRenderer.srcObject = _callProvider!.remoteStream;
         });
       }
     }
@@ -49,7 +52,7 @@ class _CallScreenState extends State<CallScreen> {
 
   @override
   void dispose() {
-    _callProvider.removeListener(_onCallStateChanged);
+    _callProvider?.removeListener(_onCallStateChanged);
     _remoteRenderer.dispose();
     super.dispose();
   }

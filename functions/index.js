@@ -97,6 +97,7 @@ exports.sendNewCallNotification = onDocumentCreated("rooms/{roomId}/calls/{callI
         data: {
             type: "NEW_CALL",
             roomId: roomId,
+            roomCode: callData.roomCode || roomId,
             callId: callId,
             callerName: callerName,
             offer: JSON.stringify(callData.offer || {}),
@@ -147,22 +148,34 @@ exports.deleteRoomAdmin = onCall(async (request) => {
         throw new HttpsError("permission-denied", "Only the room creator can delete the room.");
     }
 
+    // Helper to batch-delete a query in chunks <= 400
+    const deleteQueryBatch = async (query) => {
+        const snapshot = await query.get();
+        if (snapshot.empty) return;
+        const docs = snapshot.docs;
+        for (let i = 0; i < docs.length; i += 400) {
+            const batch = db.batch();
+            const chunk = docs.slice(i, i + 400);
+            chunk.forEach((docSnap) => batch.delete(docSnap.ref));
+            await batch.commit();
+        }
+    };
+
     // Recursive delete messages
-    const messages = await roomRef.collection("messages").get();
-    const batch = db.batch();
-    messages.docs.forEach((msg) => {
-        batch.delete(msg.ref);
-    });
+    await deleteQueryBatch(roomRef.collection("messages"));
     
     // Active games
-    const games = await roomRef.collection("active_games").get();
-    games.docs.forEach((game) => {
-        batch.delete(game.ref);
-    });
+    await deleteQueryBatch(roomRef.collection("active_games"));
 
-    batch.delete(roomRef);
-    
-    await batch.commit();
+    // Calls and candidates
+    const callsSnap = await roomRef.collection("calls").get();
+    for (const callDoc of callsSnap.docs) {
+        await deleteQueryBatch(callDoc.ref.collection("callerCandidates"));
+        await deleteQueryBatch(callDoc.ref.collection("calleeCandidates"));
+        await callDoc.ref.delete();
+    }
+
+    await roomRef.delete();
 
     return { success: true };
 });

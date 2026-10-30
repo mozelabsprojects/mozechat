@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -9,6 +10,10 @@ class WebRTCService {
   RTCPeerConnection? _peerConnection;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
+  
+  StreamSubscription<DocumentSnapshot>? _callSubscription;
+  StreamSubscription<QuerySnapshot>? _iceCandidatesSubscription;
+  Timer? _disconnectGraceTimer;
   
   final Map<String, dynamic> _configuration = {
     'iceServers': [
@@ -63,9 +68,18 @@ class WebRTCService {
     _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
       debugPrint("WebRTC Connection State: $state");
       if (onConnectionState != null) onConnectionState!(state);
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        _disconnectGraceTimer?.cancel();
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        // Tolerans süresi: Mobil ağ / WiFi geçişlerinde çağrının hemen kopmasını önler
+        _disconnectGraceTimer?.cancel();
+        _disconnectGraceTimer = Timer(const Duration(seconds: 8), () {
+          debugPrint("WebRTC Disconnect tolerans süresi doldu, çağrı sonlandırılıyor");
+          endCall();
+        });
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        _disconnectGraceTimer?.cancel();
         endCall();
       }
     };
@@ -117,9 +131,18 @@ class WebRTCService {
     _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
       debugPrint("WebRTC Connection State (Answer): $state");
       if (onConnectionState != null) onConnectionState!(state);
-      if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
-          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateConnected) {
+        _disconnectGraceTimer?.cancel();
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected) {
+        // Tolerans süresi: Mobil ağ / WiFi geçişlerinde çağrının hemen kopmasını önler
+        _disconnectGraceTimer?.cancel();
+        _disconnectGraceTimer = Timer(const Duration(seconds: 8), () {
+          debugPrint("WebRTC Disconnect tolerans süresi doldu (Answer), çağrı sonlandırılıyor");
+          endCall();
+        });
+      } else if (state == RTCPeerConnectionState.RTCPeerConnectionStateFailed ||
           state == RTCPeerConnectionState.RTCPeerConnectionStateClosed) {
+        _disconnectGraceTimer?.cancel();
         endCall();
       }
     };
@@ -180,7 +203,8 @@ class WebRTCService {
   }
 
   void _listenToAnswerAndIceCandidates() {
-    _callRepository.listenToCall(_roomId!, _callId!).listen((snapshot) async {
+    _callSubscription?.cancel();
+    _callSubscription = _callRepository.listenToCall(_roomId!, _callId!).listen((snapshot) async {
       if (!snapshot.exists) return;
       final data = snapshot.data() as Map<String, dynamic>;
       
@@ -210,7 +234,8 @@ class WebRTCService {
 
   void _listenToIceCandidates() {
     final remoteRole = _role == 'caller' ? 'callee' : 'caller';
-    _callRepository.listenToIceCandidates(_roomId!, _callId!, remoteRole).listen((snapshot) {
+    _iceCandidatesSubscription?.cancel();
+    _iceCandidatesSubscription = _callRepository.listenToIceCandidates(_roomId!, _callId!, remoteRole).listen((snapshot) {
       if (_isEndingCall) return;
       for (var change in snapshot.docChanges) {
         if (change.type == DocumentChangeType.added) {
@@ -238,6 +263,13 @@ class WebRTCService {
   Future<void> endCall() async {
     if (_isEndingCall) return;
     _isEndingCall = true;
+
+    _disconnectGraceTimer?.cancel();
+    _disconnectGraceTimer = null;
+    _callSubscription?.cancel();
+    _callSubscription = null;
+    _iceCandidatesSubscription?.cancel();
+    _iceCandidatesSubscription = null;
 
     try {
       if (_roomId != null && _callId != null) {

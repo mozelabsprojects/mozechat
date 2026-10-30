@@ -17,6 +17,8 @@ import '../widgets/chat_bottom_input_bar.dart';
 import '../widgets/typing_indicator.dart';
 import '../services/notification_service.dart';
 import '../widgets/system_status_banner.dart';
+import '../widgets/bouncy_tap.dart';
+import '../widgets/cyber_hud.dart';
 
 class ChatScreen extends StatefulWidget {
   const ChatScreen({super.key});
@@ -59,8 +61,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _screenshotCallback = ScreenshotCallback();
     _screenshotCallback.addListener(() {
       if (mounted) {
+        final nick = context.read<ChatProvider>().nickname ?? 'Kullanıcı';
         context.read<ChatProvider>().sendMessage(
-          "⚠️ [SİSTEM UYARISI] Karşı taraf ekran görüntüsü aldı!",
+          "⚠️ [SİSTEM UYARISI] $nick ekran görüntüsü aldı!",
           senderIdOverride: 'system_bot',
           nicknameOverride: 'SİSTEM',
         );
@@ -70,8 +73,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
-    // Mark user as no longer viewing chat screen
+    // Mark user as no longer viewing chat screen & stop typing indicator
     context.read<ChatProvider>().setUserInChat(false);
+    context.read<ChatProvider>().updateTyping(false);
     WidgetsBinding.instance.removeObserver(this);
     _easterEggConfettiController.dispose();
     _scrollController.dispose();
@@ -286,8 +290,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _copyCode() {
     final code = context.read<ChatProvider>().roomCode ?? "";
     Clipboard.setData(ClipboardData(text: code));
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('NODE CODE COPIED TO CLIPBOARD')),
+    final accent = context.read<ThemeProvider>().accentColor;
+    CyberHUD.show(
+      context,
+      message: 'ODA KODU PANOYA KOPYALANDI',
+      icon: Icons.copy_rounded,
+      accentColor: accent,
     );
   }
 
@@ -380,13 +388,44 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Anonymous Voice Filter:'),
+                      const Text('Anonymous Voice:'),
                       Switch(
                         value: chatProvider.isAnonymousVoice,
-                        activeThumbColor: const Color(0xFF159D87),
+                        activeThumbColor: themeProvider.accentColor,
                         onChanged: (val) {
-                          setDialogState(() {});
-                          chatProvider.toggleAnonymousVoice(val);
+                          setDialogState(() {
+                            chatProvider.toggleAnonymousVoice(val);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Tap-to-Reveal:'),
+                      Switch(
+                        value: chatProvider.tapToRevealEnabled,
+                        activeThumbColor: themeProvider.accentColor,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            chatProvider.toggleTapToReveal(val);
+                          });
+                        },
+                      ),
+                    ],
+                  ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text('Panic Camouflage:'),
+                      Switch(
+                        value: chatProvider.panicCamouflageEnabled,
+                        activeThumbColor: themeProvider.accentColor,
+                        onChanged: (val) {
+                          setDialogState(() {
+                            chatProvider.togglePanicCamouflage(val);
+                          });
                         },
                       ),
                     ],
@@ -527,20 +566,23 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Colors.black87,
-        title: const Text('Komutlar (Commands)', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+        title: const Text('Sistem Komutları', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
         content: const SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             mainAxisSize: MainAxisSize.min,
             children: [
-              Text('⚙️ Sistem', style: TextStyle(color: Color(0xFF159D87), fontWeight: FontWeight.bold)),
-              Text('!help : Yardım menüsü\n!clear [sayı] : Mesaj siler\n!note [yazı] : Not ekler\n!notes : Notları gösterir\n!remind [yazı] [sn] : Alarm kurar\n!daily : Günlük ödül\n!coin : Bakiye gösterir', style: TextStyle(color: Colors.white70, fontSize: 13)),
-              SizedBox(height: 12),
-              Text('🎮 Oyun Lobi', style: TextStyle(color: Color(0xFF159D87), fontWeight: FontWeight.bold)),
-              Text('!game : Oyun listesi\n!play bj [bahis] : Blackjack başlatır', style: TextStyle(color: Colors.white70, fontSize: 13)),
-              SizedBox(height: 12),
-              Text('🕹️ Oyun İçi', style: TextStyle(color: Color(0xFF159D87), fontWeight: FontWeight.bold)),
-              Text('!hit / !stand : Blackjack hamleleri', style: TextStyle(color: Colors.white70, fontSize: 13)),
+              Text('⚙️ Terminal Komutları', style: TextStyle(color: Color(0xFF159D87), fontWeight: FontWeight.bold, fontSize: 13)),
+              SizedBox(height: 8),
+              Text(
+                '!help : Yardım menüsünü gösterir\n'
+                '!clear [sayı] : Son mesajları temizler\n'
+                '!wipe : Ekrandaki akışı anında temizler\n'
+                '!note [yazı] : Şifreli ortak not ekler\n'
+                '!notes : Kayıtlı notları listeler\n'
+                '!remind [yazı] [sn] : Hatırlatıcı alarm kurar',
+                style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
+              ),
             ],
           ),
         ),
@@ -593,19 +635,48 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               children: [
                 const SystemStatusBanner(),
                 Expanded(
-                  child: NotificationListener<ScrollNotification>(
-                    onNotification: (ScrollNotification scrollInfo) {
-                      if (!chatProvider.isLoading && 
-                          chatProvider.hasMoreMessages && 
-                          scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
-                        chatProvider.loadMoreMessages();
-                      }
-                      return false;
-                    },
-                    child: ListView.builder(
-                      controller: _scrollController,
-                      reverse: true,
-                      itemCount: chatProvider.messages.length + (chatProvider.hasMoreMessages ? 1 : 0),
+                  child: chatProvider.isLoading && chatProvider.messages.isEmpty
+                      ? Center(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              SizedBox(
+                                width: 28,
+                                height: 28,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: accent,
+                                ),
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                '[ SECURE CHANNEL CONNECTING... ]',
+                                style: TextStyle(
+                                  color: accent.withValues(alpha: 0.6),
+                                  fontFamily: 'Courier',
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.bold,
+                                  letterSpacing: 2,
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : NotificationListener<ScrollNotification>(
+                          onNotification: (ScrollNotification scrollInfo) {
+                            if (!chatProvider.isLoading && 
+                                chatProvider.hasMoreMessages && 
+                                scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
+                              chatProvider.loadMoreMessages();
+                            }
+                            return false;
+                          },
+                          child: ListView.builder(
+                            controller: _scrollController,
+                            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+                            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
+                            reverse: true,
+                            itemCount: chatProvider.messages.length + (chatProvider.hasMoreMessages ? 1 : 0),
                       itemBuilder: (context, index) {
                         if (index == chatProvider.messages.length) {
                           return Padding(
@@ -658,13 +729,28 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     ),
                   ),
                 ),
-                if (chatProvider.isOtherTyping)
-                  Align(
-                    alignment: Alignment.centerLeft,
-                    child: TypingIndicator(
-                      textColor: accent,
-                    ),
-                  ),
+                AnimatedSwitcher(
+                  duration: const Duration(milliseconds: 250),
+                  reverseDuration: const Duration(milliseconds: 200),
+                  transitionBuilder: (child, animation) {
+                    return SlideTransition(
+                      position: Tween<Offset>(
+                        begin: const Offset(0.0, 0.4),
+                        end: Offset.zero,
+                      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                      child: FadeTransition(opacity: animation, child: child),
+                    );
+                  },
+                  child: chatProvider.isOtherTyping
+                      ? Align(
+                          key: const ValueKey('typing_indicator_active'),
+                          alignment: Alignment.centerLeft,
+                          child: TypingIndicator(
+                            textColor: accent,
+                          ),
+                        )
+                      : const SizedBox.shrink(key: ValueKey('typing_indicator_empty')),
+                ),
                 ChatBottomInputBar(
                   onEasterEggTriggered: (code) {
                     if (code == 'matrix') {
@@ -683,23 +769,44 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ],
             ),
           ),
-          if (_showScrollToBottom)
-            Positioned(
-              right: 16,
-              bottom: 80,
-              child: FloatingActionButton(
-                mini: true,
-                backgroundColor: accent,
-                onPressed: () {
-                  _scrollController.animateTo(
-                    0,
-                    duration: const Duration(milliseconds: 300),
-                    curve: Curves.easeOut,
-                  );
-                },
-                child: const Icon(Icons.arrow_downward, color: Colors.white),
+          Positioned(
+            right: 16,
+            bottom: 80,
+            child: AnimatedScale(
+              scale: _showScrollToBottom ? 1.0 : 0.0,
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutBack,
+              child: AnimatedOpacity(
+                opacity: _showScrollToBottom ? 1.0 : 0.0,
+                duration: const Duration(milliseconds: 180),
+                child: BouncyTap(
+                  onTap: () {
+                    _scrollController.animateTo(
+                      0,
+                      duration: const Duration(milliseconds: 320),
+                      curve: Curves.easeOutCubic,
+                    );
+                  },
+                  child: Container(
+                    width: 42,
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: accent,
+                      shape: BoxShape.circle,
+                      boxShadow: [
+                        BoxShadow(
+                          color: accent.withValues(alpha: 0.4),
+                          blurRadius: 10,
+                          spreadRadius: 1,
+                        ),
+                      ],
+                    ),
+                    child: const Icon(Icons.arrow_downward_rounded, color: Colors.black, size: 22),
+                  ),
+                ),
               ),
             ),
+          ),
           ConfettiWidget(
             confettiController: _easterEggConfettiController,
             blastDirectionality: BlastDirectionality.explosive,

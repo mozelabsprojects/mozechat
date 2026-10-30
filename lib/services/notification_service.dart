@@ -42,7 +42,7 @@ void notificationTapBackground(
       } finally {
         // Dismiss notification to stop the spinner
         final plugin = FlutterLocalNotificationsPlugin();
-        final notifId = notificationResponse.id ?? roomCode.hashCode;
+        final notifId = notificationResponse.id ?? roomCode.hashCode.abs();
         await plugin.cancel(id: notifId);
       }
     }
@@ -55,8 +55,20 @@ class NotificationService {
 
   static String? currentActiveRoomCode;
 
+  static Future<String?> getInitialNotificationPayload() async {
+    try {
+      final details = await _notificationsPlugin.getNotificationAppLaunchDetails();
+      if (details != null && details.didNotificationLaunchApp) {
+        return details.notificationResponse?.payload;
+      }
+    } catch (e) {
+      debugPrint('Error getting notification launch details: $e');
+    }
+    return null;
+  }
+
   static Future<void> clearNotificationsForRoom(String roomCode) async {
-    await _notificationsPlugin.cancel(id: roomCode.hashCode);
+    await _notificationsPlugin.cancel(id: roomCode.hashCode.abs());
   }
 
   static Future<void> initialize() async {
@@ -113,7 +125,7 @@ class NotificationService {
       visibility: NotificationVisibility.public,
       category: AndroidNotificationCategory.message,
       ticker: 'ticker',
-      fullScreenIntent: true,
+      fullScreenIntent: false,
       playSound: soundsEnabled,
       actions: const [
         AndroidNotificationAction(

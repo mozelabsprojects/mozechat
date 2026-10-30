@@ -1,0 +1,8 @@
+{
+  "version": "0.1.0",
+  "versionCode": 1,
+  "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
+  "changelog": "• WhatsApp tarzı arayüz ve sohbet listesi entegrasyonu\n• WebRTC çağrı kopma koruması ve bellek optimizasyonu\n• Çevrimdışı mesajlaşma kuyruğu desteği\n• Hata düzeltmeleri ve kararlılık iyileştirmeleri",
+  "forceUpdate": false
+}
+

@@ -24,6 +24,7 @@ class AudioBubble extends StatefulWidget {
 }
 
 class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClientMixin {
+  static AudioPlayer? _activePlayer;
   final AudioPlayer _audioPlayer = AudioPlayer();
   bool _isPlaying = false;
   Duration _duration = Duration.zero;
@@ -36,7 +37,7 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
   StreamSubscription? _playerStateChangeSubscription;
 
   @override
-  bool get wantKeepAlive => true;
+  bool get wantKeepAlive => false;
 
   @override
   void initState() {
@@ -55,19 +56,29 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
     }
   }
 
+  Future<Source?> _getAudioSource() async {
+    if (widget.audioUrl.isEmpty) return null;
+    if (widget.audioUrl.startsWith('/') || widget.audioUrl.startsWith('file://')) {
+      final path = widget.audioUrl.replaceFirst('file://', '');
+      return DeviceFileSource(path);
+    }
+    final cached = await AudioCacheService.getCachedAudio(widget.audioUrl);
+    if (cached != null) {
+      return DeviceFileSource(cached.path);
+    }
+    final downloaded = await AudioCacheService.downloadAndCacheAudio(widget.audioUrl);
+    if (downloaded != null) {
+      return DeviceFileSource(downloaded.path);
+    }
+    return UrlSource(widget.audioUrl);
+  }
+
   Future<void> _initAudio() async {
     try {
       if (widget.audioUrl.isNotEmpty) {
-        final cachedFile = await AudioCacheService.getCachedAudio(widget.audioUrl);
-        if (cachedFile != null) {
-          await _audioPlayer.setSourceDeviceFile(cachedFile.path);
-        } else {
-          final downloadedFile = await AudioCacheService.downloadAndCacheAudio(widget.audioUrl);
-          if (downloadedFile != null) {
-            await _audioPlayer.setSourceDeviceFile(downloadedFile.path);
-          } else {
-            await _audioPlayer.setSourceUrl(widget.audioUrl);
-          }
+        final src = await _getAudioSource();
+        if (src != null) {
+          await _audioPlayer.setSource(src);
         }
         
         // Wait briefly for the player to initialize, then attempt to get duration directly
@@ -104,7 +115,11 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
       }
     });
 
-    _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((event) {
+    _playerCompleteSubscription = _audioPlayer.onPlayerComplete.listen((event) async {
+      try {
+        await _audioPlayer.seek(Duration.zero);
+      } catch (_) {}
+      if (_activePlayer == _audioPlayer) _activePlayer = null;
       if (mounted) {
         setState(() {
           _isPlaying = false;
@@ -124,8 +139,56 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
     );
   }
 
+  Future<void> _togglePlay() async {
+    if (_isLoading) return;
+
+    try {
+      if (_isPlaying) {
+        await _audioPlayer.pause();
+        if (_activePlayer == _audioPlayer) _activePlayer = null;
+        if (mounted) setState(() => _isPlaying = false);
+      } else {
+        if (_activePlayer != null && _activePlayer != _audioPlayer) {
+          try {
+            await _activePlayer!.pause();
+          } catch (_) {}
+        }
+        _activePlayer = _audioPlayer;
+
+        final isAtEnd = _position >= _duration && _duration > Duration.zero;
+        final isCompleted = _audioPlayer.state == PlayerState.completed || _audioPlayer.state == PlayerState.stopped;
+
+        if (isAtEnd || isCompleted || _position == Duration.zero) {
+          final src = await _getAudioSource();
+          if (src != null) {
+            try {
+              await _audioPlayer.stop();
+            } catch (_) {}
+            await _audioPlayer.play(src);
+          } else {
+            await _audioPlayer.seek(Duration.zero);
+            await _audioPlayer.resume();
+          }
+        } else {
+          await _audioPlayer.resume();
+        }
+
+        if (widget.isAnonymous) {
+          await _audioPlayer.setPlaybackRate(0.75);
+        }
+
+        if (mounted) setState(() => _isPlaying = true);
+      }
+    } catch (e) {
+      debugPrint("Audio play error: $e");
+    }
+  }
+
   @override
   void dispose() {
+    if (_activePlayer == _audioPlayer) {
+      _activePlayer = null;
+    }
     _durationSubscription?.cancel();
     _positionSubscription?.cancel();
     _playerCompleteSubscription?.cancel();
@@ -170,16 +233,7 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
                     color: widget.textColor,
                     size: 36,
                   ),
-                  onPressed: () async {
-                    if (_isPlaying) {
-                      await _audioPlayer.pause();
-                    } else {
-                      if (_position == Duration.zero || _position >= _duration) {
-                        await _audioPlayer.seek(Duration.zero);
-                      }
-                      await _audioPlayer.resume();
-                    }
-                  },
+                  onPressed: _togglePlay,
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
                 ),

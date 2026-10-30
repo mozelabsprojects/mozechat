@@ -4,9 +4,17 @@ import '../services/crypto_service.dart';
 class CallRepository {
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
 
+  /// Resolves input to the derived roomId. If it's already a 64-char hex hash, reuse it to prevent double-hashing.
+  String _resolveRoomId(String codeOrId) {
+    if (codeOrId.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(codeOrId)) {
+      return codeOrId;
+    }
+    return CryptoService.deriveRoomId(codeOrId);
+  }
+
   /// Initiate a call offer
   Future<void> createOffer(String roomCode, String callId, String callerId, Map<String, dynamic> offer) async {
-    final roomId = CryptoService.deriveRoomId(roomCode);
+    final roomId = _resolveRoomId(roomCode);
     await _firestore
         .collection('rooms')
         .doc(roomId)
@@ -14,6 +22,7 @@ class CallRepository {
         .doc(callId)
         .set({
       'callerId': callerId,
+      'roomCode': roomCode,
       'offer': offer,
       'status': 'ringing',
       'createdAt': FieldValue.serverTimestamp(),
@@ -22,7 +31,7 @@ class CallRepository {
 
   /// Accept a call with an answer
   Future<void> answerCall(String roomCode, String callId, Map<String, dynamic> answer) async {
-    final roomId = CryptoService.deriveRoomId(roomCode);
+    final roomId = _resolveRoomId(roomCode);
     await _firestore
         .collection('rooms')
         .doc(roomId)
@@ -36,7 +45,7 @@ class CallRepository {
 
   /// End or reject a call
   Future<void> endCall(String roomCode, String callId) async {
-    final roomId = CryptoService.deriveRoomId(roomCode);
+    final roomId = _resolveRoomId(roomCode);
     await _firestore
         .collection('rooms')
         .doc(roomId)
@@ -51,7 +60,7 @@ class CallRepository {
   /// Add an ICE candidate
   Future<void> addIceCandidate(
       String roomCode, String callId, String role, Map<String, dynamic> candidate) async {
-    final roomId = CryptoService.deriveRoomId(roomCode);
+    final roomId = _resolveRoomId(roomCode);
     await _firestore
         .collection('rooms')
         .doc(roomId)
@@ -63,7 +72,7 @@ class CallRepository {
 
   /// Listen to call state
   Stream<DocumentSnapshot> listenToCall(String roomCode, String callId) {
-    final roomId = CryptoService.deriveRoomId(roomCode);
+    final roomId = _resolveRoomId(roomCode);
     return _firestore
         .collection('rooms')
         .doc(roomId)
@@ -74,7 +83,7 @@ class CallRepository {
 
   /// Listen to new incoming calls for a specific room (optional, handled via FCM in background)
   Stream<QuerySnapshot> listenToIncomingCalls(String roomCode) {
-    final roomId = CryptoService.deriveRoomId(roomCode);
+    final roomId = _resolveRoomId(roomCode);
     return _firestore
         .collection('rooms')
         .doc(roomId)
@@ -85,7 +94,7 @@ class CallRepository {
 
   /// Listen to remote ICE candidates
   Stream<QuerySnapshot> listenToIceCandidates(String roomCode, String callId, String remoteRole) {
-    final roomId = CryptoService.deriveRoomId(roomCode);
+    final roomId = _resolveRoomId(roomCode);
     return _firestore
         .collection('rooms')
         .doc(roomId)

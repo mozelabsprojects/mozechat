@@ -29,6 +29,7 @@ class ChatProvider extends ChangeNotifier {
   bool _isUploadingMedia = false;
   double _uploadProgress = 0.0;
   String _uploadEta = '';
+  DateTime _lastUploadNotify = DateTime(0);
   
   bool get isUploadingMedia => _isUploadingMedia;
   double get uploadProgress => _uploadProgress;
@@ -91,9 +92,28 @@ class ChatProvider extends ChangeNotifier {
   int _messageLimit = 50;
   bool _isAnonymousVoice = false;
   bool get isAnonymousVoice => _isAnonymousVoice;
+
+  bool _tapToRevealEnabled = false;
+  bool get tapToRevealEnabled => _tapToRevealEnabled;
+
+  bool _panicCamouflageEnabled = false;
+  bool get panicCamouflageEnabled => _panicCamouflageEnabled;
   
   void toggleAnonymousVoice(bool val) {
     _isAnonymousVoice = val;
+    PreferencesService.saveAnonymousVoiceEnabled(val);
+    notifyListeners();
+  }
+
+  void toggleTapToReveal(bool val) {
+    _tapToRevealEnabled = val;
+    PreferencesService.saveTapToRevealEnabled(val);
+    notifyListeners();
+  }
+
+  void togglePanicCamouflage(bool val) {
+    _panicCamouflageEnabled = val;
+    PreferencesService.savePanicCamouflageEnabled(val);
     notifyListeners();
   }
   
@@ -109,6 +129,9 @@ class ChatProvider extends ChangeNotifier {
     _nickname = await PreferencesService.getNickname();
     _backgroundStyle =
         await PreferencesService.getBackgroundStyle() ?? 'matrix';
+    _isAnonymousVoice = await PreferencesService.getAnonymousVoiceEnabled();
+    _tapToRevealEnabled = await PreferencesService.getTapToRevealEnabled();
+    _panicCamouflageEnabled = await PreferencesService.getPanicCamouflageEnabled();
     
     _botService = BotService(
       sendBotMessage: (msg) {
@@ -233,7 +256,17 @@ class ChatProvider extends ChangeNotifier {
     _isUploadingMedia = isUploading;
     _uploadProgress = progress;
     _uploadEta = eta;
-    notifyListeners();
+
+    final now = DateTime.now();
+    // Throttle progress updates to avoid flooding notifyListeners (~100ms)
+    // Always notify immediately on finish, initial start or 100% completion
+    if (!isUploading ||
+        progress == 0.0 ||
+        progress >= 1.0 ||
+        now.difference(_lastUploadNotify).inMilliseconds >= 100) {
+      _lastUploadNotify = now;
+      notifyListeners();
+    }
   }
 
   Future<void> sendLocation(double lat, double lng, String locationName, {Map<String, dynamic>? metadata}) async {
@@ -302,6 +335,10 @@ class ChatProvider extends ChangeNotifier {
 
   Future<bool> joinRoom(String code) async {
     try {
+      _roomCode = code;
+      _firestoreMessages = [];
+      _localMessages = [];
+      _cachedMessages = null;
       _setLoading(true);
       final connectivity = await Connectivity().checkConnectivity();
       final isOffline = connectivity.contains(ConnectivityResult.none);
@@ -316,7 +353,6 @@ class ChatProvider extends ChangeNotifier {
           _notes = notesData.cast<String>();
         }
       }
-      _roomCode = code;
       _roomJoinTime = DateTime.now();
 
       // Geçmişe ekle
@@ -331,6 +367,7 @@ class ChatProvider extends ChangeNotifier {
       _setLoading(false);
       return true;
     } catch (e) {
+      _setLoading(false);
       _setError(e.toString());
       return false;
     }
@@ -369,6 +406,7 @@ class ChatProvider extends ChangeNotifier {
       _setLoading(false);
       return true;
     } catch (e) {
+      _setLoading(false);
       _setError(e.toString());
       return false;
     }
@@ -382,15 +420,26 @@ class ChatProvider extends ChangeNotifier {
   }) async {
     if (_roomCode == null || text.trim().isEmpty) return;
 
-    final connectivity = await Connectivity().checkConnectivity();
-    final isOffline = connectivity.contains(ConnectivityResult.none);
-
     final replyId = _replyToMessage?.id;
     _replyToMessage = null;
     notifyListeners();
 
-    if (isOffline) {
-      final localId = const Uuid().v4();
+    final localId = const Uuid().v4();
+    try {
+      const initialStatus = 'sent';
+      await _repository.sendMessage(
+        _roomCode!,
+        text.trim(),
+        nicknameOverride ?? _nickname ?? 'Unknown',
+        senderIdOverride: senderIdOverride,
+        replyToMessageId: replyId,
+        localId: localId,
+        status: initialStatus,
+        metadata: metadata,
+        aesKeyBase64: _currentAesKeyBase64,
+      );
+      _playSound('sounds/sentlnx.mp3');
+    } catch (e) {
       addLocalMessage(
         Message(
           id: 'temp_$localId',
@@ -405,23 +454,6 @@ class ChatProvider extends ChangeNotifier {
           metadata: metadata,
         ),
       );
-      return;
-    }
-
-    try {
-      const initialStatus = 'sent';
-      await _repository.sendMessage(
-        _roomCode!,
-        text.trim(),
-        nicknameOverride ?? _nickname ?? 'Unknown',
-        senderIdOverride: senderIdOverride,
-        replyToMessageId: replyId,
-        status: initialStatus,
-        metadata: metadata,
-        aesKeyBase64: _currentAesKeyBase64,
-      );
-      _playSound('sounds/sentlnx.mp3');
-    } catch (e) {
       _setError(e.toString());
     }
   }
@@ -506,9 +538,15 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> editMessage(String messageId, String newText) async {
+  Future<void> editMessage(String messageId, String newText, {bool isGameMove = false}) async {
     if (_roomCode != null) {
-      await _repository.editMessage(_roomCode!, messageId, newText, aesKeyBase64: _currentAesKeyBase64);
+      await _repository.editMessage(
+        _roomCode!,
+        messageId,
+        newText,
+        aesKeyBase64: _currentAesKeyBase64,
+        isGameMove: isGameMove,
+      );
     }
   }
 
@@ -566,13 +604,18 @@ class ChatProvider extends ChangeNotifier {
             }
           });
 
+          final oldTyping = _isOtherTyping;
+          bool newTyping = false;
           typing.forEach((key, value) {
             if (key != currentUid && value == true) {
-              _isOtherTyping = true;
+              newTyping = true;
             }
           });
+          _isOtherTyping = newTyping;
 
-          notifyListeners();
+          if (oldTyping != newTyping) {
+            notifyListeners();
+          }
         }
       });
     }
@@ -715,6 +758,7 @@ class ChatProvider extends ChangeNotifier {
   void leaveRoom() {
     _isUserInChatScreen = false;
     updatePresence(false);
+    updateTyping(false);
     NotificationService.currentActiveRoomCode = null;
     _messagesSubscription?.cancel();
     _roomSubscription?.cancel();
@@ -796,6 +840,7 @@ class ChatProvider extends ChangeNotifier {
   @override
   void dispose() {
     updatePresence(false);
+    updateTyping(false);
     _messagesSubscription?.cancel();
     _roomSubscription?.cancel();
     super.dispose();

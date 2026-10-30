@@ -10,6 +10,8 @@ import '../widgets/cyber_grid.dart';
 import 'chat_screen.dart';
 import 'settings_screen.dart';
 import 'login_screen.dart';
+import 'qr_scanner_screen.dart';
+import '../widgets/qr_dialog.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -58,7 +60,18 @@ class _RoomScreenState extends State<RoomScreen>
   void _createRoom() {
     final code = CryptoService.generateSecureRoomCode();
     _codeController.text = code;
-    _joinRoom(code);
+    QRDialog.show(context, roomCode: code, roomTitle: 'YENİ GÜVENLİ ODA');
+  }
+
+  void _scanQR() async {
+    final scannedCode = await Navigator.push<String>(
+      context,
+      MaterialPageRoute(builder: (_) => const QRScannerScreen()),
+    );
+    if (scannedCode != null && scannedCode.isNotEmpty && mounted) {
+      _codeController.text = scannedCode;
+      _joinRoom(scannedCode);
+    }
   }
 
   void _joinRoom(String code) async {
@@ -289,8 +302,10 @@ class _RoomScreenState extends State<RoomScreen>
           IconButton(
             icon: Icon(Icons.logout, color: accentColor.withValues(alpha: 0.6)),
             onPressed: () async {
+              context.read<ChatProvider>().leaveRoom();
               await FirebaseAuth.instance.signOut();
               await PreferencesService.saveNickname(null);
+              await PreferencesService.saveLastActiveRoom(null);
               if (context.mounted) {
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginScreen()),
@@ -434,6 +449,11 @@ class _RoomScreenState extends State<RoomScreen>
                                       focusedBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(12),
                                         borderSide: BorderSide(color: accentColor),
+                                      ),
+                                      suffixIcon: IconButton(
+                                        icon: Icon(Icons.qr_code_scanner_rounded, color: accentColor),
+                                        tooltip: 'QR Kod Tara',
+                                        onPressed: _scanQR,
                                       ),
                                     ),
                                     onSubmitted: (val) => _joinRoom(val.trim().toUpperCase()),

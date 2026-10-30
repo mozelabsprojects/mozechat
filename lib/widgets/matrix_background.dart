@@ -48,18 +48,20 @@ class _MatrixBackgroundState extends State<MatrixBackground>
 
   @override
   Widget build(BuildContext context) {
-    return AnimatedBuilder(
-      animation: _controller,
-      builder: (context, child) {
-        return CustomPaint(
-          size: Size.infinite,
-          painter: _MatrixPainter(
-            _drops,
-            widget.color,
-            MediaQuery.of(context).size.height,
-          ),
-        );
-      },
+    return RepaintBoundary(
+      child: AnimatedBuilder(
+        animation: _controller,
+        builder: (context, child) {
+          return CustomPaint(
+            size: Size.infinite,
+            painter: _MatrixPainter(
+              _drops,
+              widget.color,
+              MediaQuery.of(context).size.height,
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -109,39 +111,48 @@ class _MatrixPainter extends CustomPainter {
       Paint()..color = Colors.black,
     );
 
+    const double lineHeight = 20.0;
+
     for (var drop in drops) {
       drop.y += drop.speed;
-      if (drop.y > screenHeight) {
+      if (drop.y > screenHeight + (drop.maxLength * lineHeight)) {
         drop.y = 0;
       }
 
-      for (int i = 0; i < drop.maxLength; i++) {
-        final double currentY = drop.y - (i * 20);
-        if (currentY < 0 || currentY > screenHeight) continue;
+      // Sütunun tepesi ve tabanı
+      final double columnTopY = drop.y - (drop.maxLength * lineHeight);
+      if (drop.y < 0 || columnTopY > screenHeight) continue;
 
-        if (random.nextDouble() > 0.95 && !drop.isWord) {
+      // Tüm sütun karakterlerini tek bir TextSpan hiyerarşisinde topla
+      // Bu sayede 400 defa layout() yerine drop başına sadece 1 defa layout() çalışır!
+      final List<TextSpan> spans = [];
+
+      for (int i = drop.maxLength - 1; i >= 0; i--) {
+        if (random.nextDouble() > 0.98 && !drop.isWord) {
           drop.characters[i] = String.fromCharCode(0x30A0 + random.nextInt(96));
         }
 
-        final double opacity = 1.0 - (i / drop.maxLength);
+        final double opacity = (1.0 - (i / drop.maxLength)).clamp(0.1, 1.0);
         final TextStyle textStyle = TextStyle(
           color: i == 0 ? Colors.white : color.withValues(alpha: opacity),
-          fontSize: 18,
+          fontSize: 16,
+          height: 1.15,
           fontWeight: FontWeight.bold,
           fontFamily: 'monospace',
         );
 
-        final TextSpan span = TextSpan(
-          text: drop.characters[i],
+        spans.add(TextSpan(
+          text: i == 0 ? drop.characters[i] : '${drop.characters[i]}\n',
           style: textStyle,
-        );
-        final TextPainter tp = TextPainter(
-          text: span,
-          textDirection: TextDirection.ltr,
-        );
-        tp.layout();
-        tp.paint(canvas, Offset(drop.x, currentY));
+        ));
       }
+
+      final TextPainter tp = TextPainter(
+        text: TextSpan(children: spans),
+        textDirection: TextDirection.ltr,
+      );
+      tp.layout();
+      tp.paint(canvas, Offset(drop.x, columnTopY));
     }
   }
 

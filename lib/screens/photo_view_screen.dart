@@ -35,6 +35,7 @@ class _PhotoViewScreenState extends State<PhotoViewScreen> {
   }
 
   Future<void> _downloadImage() async {
+    if (widget.imageMessages.isEmpty || currentIndex >= widget.imageMessages.length) return;
     final currentImageUrl = widget.imageMessages[currentIndex].mediaUrl;
     if (currentImageUrl == null) return;
 

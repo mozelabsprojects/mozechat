@@ -2,6 +2,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 
 class RoomModel {
   final String roomId;
+  final String roomCode;
   final String roomName;
   final bool isGroup;
   final String? lastMessage;
@@ -12,9 +13,9 @@ class RoomModel {
   final String encryptionKey; // Deprecated but kept for fallback
   final Map<String, String>? encryptedKeys; // For E2EE mapping
 
-
   RoomModel({
     required this.roomId,
+    required this.roomCode,
     required this.roomName,
     required this.isGroup,
     this.lastMessage,
@@ -24,13 +25,13 @@ class RoomModel {
     required this.members,
     required this.encryptionKey,
     this.encryptedKeys,
-
   });
 
   factory RoomModel.fromMap(Map<String, dynamic> data) {
     return RoomModel(
       roomId: data['roomId'] ?? '',
-      roomName: data['roomName'] ?? '',
+      roomCode: data['roomCode'] ?? data['roomId'] ?? '',
+      roomName: data['roomName'] ?? data['roomCode'] ?? '',
       isGroup: data['isGroup'] ?? false,
       lastMessage: data['lastMessage'],
       lastMessageTime: (data['lastMessageTime'] as Timestamp?)?.toDate(),
@@ -41,13 +42,13 @@ class RoomModel {
       encryptedKeys: data['encryptedKeys'] != null
           ? Map<String, String>.from(data['encryptedKeys'])
           : null,
-
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'roomId': roomId,
+      'roomCode': roomCode,
       'roomName': roomName,
       'isGroup': isGroup,
       'lastMessage': lastMessage,
@@ -57,7 +58,6 @@ class RoomModel {
       'members': members,
       'encryptionKey': encryptionKey,
       'encryptedKeys': encryptedKeys,
-
     };
   }
 }

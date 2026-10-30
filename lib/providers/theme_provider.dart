@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/cupertino.dart';
 import '../services/preferences_service.dart';
 
 enum AppThemeMode { matrix, cyberpunk, retro, hacker, blue }
@@ -92,6 +93,14 @@ class ThemeProvider extends ChangeNotifier {
               surface: Colors.black,
             ),
       fontFamily: 'Courier',
+      pageTransitionsTheme: const PageTransitionsTheme(
+        builders: {
+          TargetPlatform.android: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+          TargetPlatform.linux: ZoomPageTransitionsBuilder(),
+          TargetPlatform.windows: ZoomPageTransitionsBuilder(),
+        },
+      ),
       appBarTheme: AppBarTheme(
         backgroundColor: bgColor,
         foregroundColor: fgColor,
@@ -109,9 +118,11 @@ class ThemeProvider extends ChangeNotifier {
       ),
       inputDecorationTheme: InputDecorationTheme(
         enabledBorder: OutlineInputBorder(
-          borderSide: BorderSide(color: fgColor.withValues(alpha: 0.5)),
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: fgColor.withValues(alpha: 0.3)),
         ),
         focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
           borderSide: BorderSide(color: fgColor),
         ),
         labelStyle: TextStyle(color: fgColor),
@@ -126,11 +137,14 @@ class ThemeProvider extends ChangeNotifier {
         style: ElevatedButton.styleFrom(
           foregroundColor: bgColor,
           backgroundColor: fgColor,
+          elevation: 0,
+          padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
           textStyle: const TextStyle(
             fontFamily: 'Courier',
             fontWeight: FontWeight.bold,
+            letterSpacing: 1.2,
           ),
-          shape: const RoundedRectangleBorder(borderRadius: BorderRadius.zero),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
         ),
       ),
       textButtonTheme: TextButtonThemeData(

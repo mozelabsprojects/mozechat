@@ -238,6 +238,7 @@ class ChatRepository {
     if (!snapshot.exists) {
       final data = <String, dynamic>{
         'members': [uid],
+        'roomCode': roomCode,
         'presence': {uid: true},
         'createdAt': FieldValue.serverTimestamp(),
         'lastMessageTime': FieldValue.serverTimestamp(),
@@ -255,6 +256,7 @@ class ChatRepository {
 
       final updates = <String, dynamic>{
         'members': FieldValue.arrayUnion([uid]),
+        'roomCode': roomCode,
         'presence.$uid': true,
       };
       if (token != null) updates['fcmTokens.$uid'] = token;
@@ -811,15 +813,35 @@ class ChatRepository {
     if (uid == null) return;
     
     final roomId = CryptoService.deriveRoomId(roomCode);
-    await _firestore
+    final docRef = _firestore
         .collection('rooms')
         .doc(roomId)
         .collection('messages')
-        .doc(messageId)
-        .update({'reactions.$uid': emoji});
+        .doc(messageId);
+
+    try {
+      final docSnap = await docRef.get();
+      if (docSnap.exists) {
+        final currentReaction = docSnap.data()?['reactions']?[uid];
+        if (currentReaction == emoji) {
+          // Toggle off if already reacted with the same emoji
+          await docRef.update({'reactions.$uid': FieldValue.delete()});
+          return;
+        }
+      }
+      await docRef.update({'reactions.$uid': emoji});
+    } catch (_) {
+      await docRef.update({'reactions.$uid': emoji}).catchError((_) {});
+    }
   }
 
-  Future<void> editMessage(String roomCode, String messageId, String newText, {String? aesKeyBase64}) async {
+  Future<void> editMessage(
+    String roomCode,
+    String messageId,
+    String newText, {
+    String? aesKeyBase64,
+    bool isGameMove = false,
+  }) async {
     final uid = currentUserId;
     if (uid == null) return;
     
@@ -833,7 +855,10 @@ class ChatRepository {
     if (!snapshot.exists) return;
 
     final data = snapshot.data()!;
-    if (data['senderId'] != uid) return; // Only sender can edit
+    final isGame = isGameMove || newText.startsWith('!') || (data['metadata']?['type'] == 'game');
+    if (!isGame && data['senderId'] != uid) {
+      return; // Only original sender can edit regular personal messages
+    }
 
     final cipherText = data['cipherText'] as String?;
     final iv = data['iv'] as String?;
@@ -887,16 +912,20 @@ class ChatRepository {
     if (uid == null || messageIds.isEmpty) return;
     final roomId = CryptoService.deriveRoomId(roomCode);
 
-    final batch = _firestore.batch();
-    for (final id in messageIds) {
-      final ref = _firestore
-          .collection('rooms')
-          .doc(roomId)
-          .collection('messages')
-          .doc(id);
-      batch.update(ref, {'status': status});
+    // Process in chunks of 400 to respect Firestore 500-write batch limit
+    for (var i = 0; i < messageIds.length; i += 400) {
+      final end = (i + 400 < messageIds.length) ? i + 400 : messageIds.length;
+      final chunk = messageIds.sublist(i, end);
+      final batch = _firestore.batch();
+      for (final id in chunk) {
+        final ref = _firestore
+            .collection('rooms')
+            .doc(roomId)
+            .collection('messages')
+            .doc(id);
+        batch.update(ref, {'status': status});
+      }
+      await batch.commit().catchError((_) {});
     }
-
-    await batch.commit().catchError((_) {});
   }
 }

@@ -6,7 +6,7 @@ import 'package:provider/provider.dart';
 import 'providers/chat_provider.dart';
 import 'providers/theme_provider.dart';
 import 'screens/login_screen.dart';
-import 'screens/room_screen.dart';
+import 'screens/rooms_list_screen.dart';
 import 'screens/chat_screen.dart';
 import 'firebase_options.dart';
 
@@ -104,7 +104,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       }
     }
   } else if (message.data['type'] == 'NEW_CALL') {
-    final roomId = message.data['roomId'];
+    final roomId = message.data['roomCode'] ?? message.data['roomId'];
     final callerName = message.data['callerName'];
     final callId = message.data['callId'];
     final offerStr = message.data['offer'];
@@ -189,6 +189,12 @@ void main() async {
     if (nickname != null && lastActiveRoom != null) {
       initialRoom = lastActiveRoom;
     }
+
+    // Cold-start notification launch check
+    final launchPayload = await NotificationService.getInitialNotificationPayload();
+    if (launchPayload != null && launchPayload.isNotEmpty) {
+      initialRoom = launchPayload;
+    }
   } catch (e) {
     debugPrint("❌ Firebase başlatma hatası: $e");
   }
@@ -266,7 +272,7 @@ class _MozechatAppState extends State<MozechatApp> {
         final chatProvider = context.read<ChatProvider>();
         final success = await chatProvider.joinRoom(widget.initialRoom!);
         if (success && mounted) {
-          _homeScreen = const RoomScreen();
+          _homeScreen = const RoomsListScreen();
           WidgetsBinding.instance.addPostFrameCallback((_) {
             if (navigatorKey.currentState != null) {
               navigatorKey.currentState!.push(
@@ -275,10 +281,10 @@ class _MozechatAppState extends State<MozechatApp> {
             }
           });
         } else {
-          _homeScreen = const RoomScreen();
+          _homeScreen = const RoomsListScreen();
         }
       } else {
-        _homeScreen = const RoomScreen();
+        _homeScreen = const RoomsListScreen();
       }
     }
     // Diğer durumda _homeScreen zaten LoginScreen olarak kalır

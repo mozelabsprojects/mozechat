@@ -24,6 +24,8 @@ class _CyberGridState extends State<CyberGrid> with TickerProviderStateMixin {
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
   late Ticker _ticker;
+  final ValueNotifier<int> _frameNotifier = ValueNotifier<int>(0);
+  Duration _lastFrameTime = Duration.zero;
   
   final List<Particle> _particles = [];
   bool _particlesInitialized = false;
@@ -37,7 +39,7 @@ class _CyberGridState extends State<CyberGrid> with TickerProviderStateMixin {
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(seconds: 2),
-    )..repeat(reverse: true);
+    );
     
     _pulseAnim = Tween<double>(begin: 0.3, end: 0.8).animate(
       CurvedAnimation(parent: _pulseController, curve: Curves.easeInOut),
@@ -123,7 +125,12 @@ class _CyberGridState extends State<CyberGrid> with TickerProviderStateMixin {
   void _tick(Duration elapsed) {
     if (!_particlesInitialized || _lastSize.width == 0) return;
     
-    final dt = 0.016; 
+    // Throttle to ~30 FPS to save 50% CPU/GPU and battery
+    if (_lastFrameTime != Duration.zero && (elapsed - _lastFrameTime).inMilliseconds < 33) {
+      return;
+    }
+    final dt = _lastFrameTime == Duration.zero ? 0.033 : (elapsed - _lastFrameTime).inMilliseconds / 1000.0;
+    _lastFrameTime = elapsed;
     _elapsedTime += dt;
 
     if (_elapsedTime % 15.0 < 10.0) {
@@ -138,91 +145,100 @@ class _CyberGridState extends State<CyberGrid> with TickerProviderStateMixin {
       }
     }
 
-    setState(() {
-      for (var p in _particles) {
-        if (_isForming && p.targetX != null && p.targetY != null) {
-          final dx = p.targetX! - p.x;
-          final dy = p.targetY! - p.y;
-          p.vx = p.vx * 0.9 + dx * 0.5;
-          p.vy = p.vy * 0.9 + dy * 0.5;
-        } else {
-          final rng = Random();
-          p.vx += (rng.nextDouble() - 0.5) * 5;
-          p.vy += (rng.nextDouble() - 0.5) * 5;
-          
-          final speed = sqrt(p.vx * p.vx + p.vy * p.vy);
-          if (speed > 40) {
-            p.vx = (p.vx / speed) * 40;
-            p.vy = (p.vy / speed) * 40;
-          }
-        }
-
-        p.x += p.vx * dt;
-        p.y += p.vy * dt;
-
-        if (!_isForming) {
-          if (p.x < 0) { p.x = 0; p.vx *= -1; }
-          if (p.x > _lastSize.width) { p.x = _lastSize.width; p.vx *= -1; }
-          if (p.y < 0) { p.y = 0; p.vy *= -1; }
-          if (p.y > _lastSize.height) { p.y = _lastSize.height; p.vy *= -1; }
+    for (var p in _particles) {
+      if (_isForming && p.targetX != null && p.targetY != null) {
+        final dx = p.targetX! - p.x;
+        final dy = p.targetY! - p.y;
+        p.vx = p.vx * 0.9 + dx * 0.5;
+        p.vy = p.vy * 0.9 + dy * 0.5;
+      } else {
+        final rng = Random();
+        p.vx += (rng.nextDouble() - 0.5) * 5;
+        p.vy += (rng.nextDouble() - 0.5) * 5;
+        
+        final speed = sqrt(p.vx * p.vx + p.vy * p.vy);
+        if (speed > 40) {
+          p.vx = (p.vx / speed) * 40;
+          p.vy = (p.vy / speed) * 40;
         }
       }
-    });
+
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+
+      if (!_isForming) {
+        if (p.x < 0) { p.x = 0; p.vx *= -1; }
+        if (p.x > _lastSize.width) { p.x = _lastSize.width; p.vx *= -1; }
+        if (p.y < 0) { p.y = 0; p.vy *= -1; }
+        if (p.y > _lastSize.height) { p.y = _lastSize.height; p.vy *= -1; }
+      }
+    }
+
+    // Trigger targeted repaint without rebuilding the whole widget tree
+    _frameNotifier.value++;
   }
 
   @override
   void dispose() {
     _pulseController.dispose();
     _ticker.dispose();
+    _frameNotifier.dispose();
     super.dispose();
   }
 
   @override
   Widget build(BuildContext context) {
     final isEco = !context.watch<ThemeProvider>().animationsEnabled;
-    return Stack(
-      children: [
-        Positioned.fill(
-          child: LayoutBuilder(
-            builder: (context, constraints) {
-              final size = Size(constraints.maxWidth, constraints.maxHeight);
-              if (!_particlesInitialized && size.width > 0) {
-                _initParticles(size);
-              } else if (_particlesInitialized && _lastSize != size) {
-                _lastSize = size;
-                if (_isForming) _computeTargets(size);
-              }
-              return CustomPaint(
-                painter: _CyberGridPainter(
-                  widget.accentColor, 
-                  isEco ? null : _particles,
-                  isEco,
-                ),
-              );
-            },
+    return RepaintBoundary(
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final size = Size(constraints.maxWidth, constraints.maxHeight);
+                if (!_particlesInitialized && size.width > 0) {
+                  _initParticles(size);
+                } else if (_particlesInitialized && _lastSize != size) {
+                  _lastSize = size;
+                  if (_isForming) _computeTargets(size);
+                }
+                return AnimatedBuilder(
+                  animation: _frameNotifier,
+                  builder: (context, _) {
+                    return CustomPaint(
+                      painter: _CyberGridPainter(
+                        widget.accentColor, 
+                        isEco ? null : _particles,
+                        isEco,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
           ),
-        ),
-        if (!isEco)
-          AnimatedBuilder(
-            animation: _pulseAnim,
-            builder: (context, child) {
-              return Positioned.fill(
-                child: Container(
-                  decoration: BoxDecoration(
-                    gradient: RadialGradient(
-                      center: Alignment.center,
-                      radius: 1.2,
-                      colors: [
-                        widget.accentColor.withValues(alpha: _pulseAnim.value * 0.08),
-                        Colors.transparent,
-                      ],
+          if (!isEco)
+            AnimatedBuilder(
+              animation: _pulseAnim,
+              builder: (context, child) {
+                return Positioned.fill(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      gradient: RadialGradient(
+                        center: Alignment.center,
+                        radius: 1.2,
+                        colors: [
+                          widget.accentColor.withValues(alpha: _pulseAnim.value * 0.08),
+                          Colors.transparent,
+                        ],
+                      ),
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-      ],
+                );
+              },
+            ),
+        ],
+      ),
     );
   }
 }

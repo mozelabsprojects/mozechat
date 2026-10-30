@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 
 import '../models/message.dart';
@@ -7,6 +8,7 @@ import '../providers/theme_provider.dart';
 import '../utils/color_utils.dart';
 import 'message_bubble.dart';
 import 'date_divider.dart';
+import 'swipe_to_reply.dart';
 
 class ChatMessageItem extends StatelessWidget {
   final Message msg;
@@ -96,29 +98,18 @@ class ChatMessageItem extends StatelessWidget {
     } else {
       bubble = GestureDetector(
         onLongPress: onLongPress,
+        onDoubleTap: () {
+          HapticFeedback.mediumImpact();
+          chatProvider.reactToMessage(msg.id, '🛡️');
+        },
         child: bubble,
       );
     }
 
-    final dismissibleBubble = Dismissible(
-      key: Key(msg.id),
-      direction: DismissDirection.horizontal,
-      confirmDismiss: (direction) async {
-        chatProvider.replyTo(msg);
-        return false; // Snap back, do not delete
-      },
-      background: Container(
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.only(left: 20),
-        color: accent.withValues(alpha: 0.15),
-        child: Icon(Icons.reply, color: accent),
-      ),
-      secondaryBackground: Container(
-        alignment: Alignment.centerRight,
-        padding: const EdgeInsets.only(right: 20),
-        color: accent.withValues(alpha: 0.15),
-        child: Icon(Icons.reply, color: accent),
-      ),
+    final wrappedBubble = SwipeToReply(
+      enabled: !isSelectionMode && !msg.isDeleted,
+      accentColor: accent,
+      onReply: () => chatProvider.replyTo(msg),
       child: bubble,
     );
 
@@ -126,11 +117,11 @@ class ChatMessageItem extends StatelessWidget {
       return Column(
         children: [
           DateDivider(date: msg.timestamp),
-          dismissibleBubble,
+          wrappedBubble,
         ],
       );
     }
 
-    return dismissibleBubble;
+    return wrappedBubble;
   }
 }

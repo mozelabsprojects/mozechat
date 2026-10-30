@@ -8,7 +8,10 @@ import '../utils/color_utils.dart';
 import '../screens/media_gallery_screen.dart';
 import '../screens/room_screen.dart';
 import '../screens/call_screen.dart';
+import '../screens/panic_camouflage_screen.dart';
 import '../providers/call_provider.dart';
+import 'qr_dialog.dart';
+import 'bouncy_tap.dart';
 
 class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<String> selectedMessages;
@@ -99,12 +102,12 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
                 Text(
                   chatProvider.isOtherTyping
-                      ? '[!] Peer is encrypting data...'
+                      ? 'yazıyor...'
                       : (chatProvider.isOtherOnline
-                          ? 'Online'
+                          ? 'çevrimiçi'
                           : (chatProvider.otherLastSeen != null
-                              ? 'Last seen: ${_formatLastSeen(chatProvider.otherLastSeen!)}'
-                              : 'Offline')),
+                              ? 'son görülme: ${_formatLastSeen(chatProvider.otherLastSeen!)}'
+                              : 'çevrimdışı')),
                   style: TextStyle(
                     fontSize: 12,
                     color: chatProvider.isOtherTyping
@@ -121,25 +124,58 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               ],
             ),
       leading: selectedMessages.isNotEmpty
-          ? IconButton(
-              icon: Icon(Icons.close, color: topBarTextColor),
-              onPressed: onClearSelection,
+          ? BouncyTap(
+              onTap: onClearSelection,
+              child: Icon(Icons.close, color: topBarTextColor),
             )
           : null,
       actions: selectedMessages.isNotEmpty
           ? [
-              IconButton(
-                icon: const Icon(Icons.delete, color: Colors.redAccent),
-                onPressed: () {
+              BouncyTap(
+                onTap: () {
                   chatProvider.deleteMessages(selectedMessages);
                   onClearSelection();
                 },
+                child: const Padding(
+                  padding: EdgeInsets.symmetric(horizontal: 12.0),
+                  child: Icon(Icons.delete, color: Colors.redAccent),
+                ),
               ),
             ]
           : [
-              IconButton(
-                icon: Icon(Icons.phone, color: topBarTextColor),
-                onPressed: () async {
+              if (chatProvider.panicCamouflageEnabled)
+                BouncyTap(
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        fullscreenDialog: true,
+                        builder: (_) => const PanicCamouflageScreen(),
+                      ),
+                    );
+                  },
+                  child: const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 8.0),
+                    child: Icon(Icons.shield_outlined, color: Colors.orangeAccent),
+                  ),
+                ),
+              BouncyTap(
+                onTap: () {
+                  if (chatProvider.roomCode != null) {
+                    QRDialog.show(
+                      context,
+                      roomCode: chatProvider.roomCode!,
+                      roomTitle: 'ODA QR KODU',
+                    );
+                  }
+                },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Icon(Icons.qr_code_2_rounded, color: topBarTextColor),
+                ),
+              ),
+              BouncyTap(
+                onTap: () async {
                   final callProvider = context.read<CallProvider>();
                   try {
                     await callProvider.startCall(chatProvider.roomCode!, chatProvider.currentUserId!, chatProvider.nickname ?? 'Arayan Kişi');
@@ -153,6 +189,10 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     debugPrint('Start call failed: $e');
                   }
                 },
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                  child: Icon(Icons.phone, color: topBarTextColor),
+                ),
               ),
               PopupMenuButton<String>(
                 icon: Icon(Icons.more_vert, color: topBarTextColor),

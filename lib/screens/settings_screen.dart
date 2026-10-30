@@ -2,10 +2,15 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
-import '../models/user_model.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/chat_provider.dart';
+import '../services/preferences_service.dart';
+import '../services/update_service.dart';
+import '../services/audio_service.dart';
+import '../services/cache_service.dart';
 import '../widgets/cyber_grid.dart';
+import '../widgets/cyber_hud.dart';
 
 class SettingsScreen extends StatefulWidget {
   const SettingsScreen({super.key});
@@ -20,12 +25,46 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final _nameController = TextEditingController();
 
   bool _isLoading = false;
-  UserModel? _userModel;
+  bool _isCheckingUpdate = false;
+  bool _isClearingCache = false;
+  String _cacheSize = 'Hesaplanıyor...';
+  bool _outgoingSound = true;
+  bool _incomingSound = true;
 
   @override
   void initState() {
     super.initState();
     _loadUserProfile();
+    _refreshCacheSize();
+  }
+
+  Future<void> _refreshCacheSize() async {
+    final size = await CacheService.getFormattedCacheSize();
+    if (mounted) {
+      setState(() => _cacheSize = size);
+    }
+  }
+
+  Future<void> _clearCache() async {
+    setState(() => _isClearingCache = true);
+    await CacheService.clearAllCache();
+    await _refreshCacheSize();
+    if (mounted) {
+      setState(() => _isClearingCache = false);
+      final accent = context.read<ThemeProvider>().accentColor;
+      CyberHUD.show(
+        context,
+        message: '[OK] MEDYA ÖNBELLEĞİ TEMİZLENDİ',
+        icon: Icons.cleaning_services_outlined,
+        accentColor: accent,
+      );
+    }
+  }
+
+  Future<void> _checkUpdate() async {
+    setState(() => _isCheckingUpdate = true);
+    await UpdateService().checkForUpdate(showToastIfUpToDate: true, context: context);
+    if (mounted) setState(() => _isCheckingUpdate = false);
   }
 
   Future<void> _loadUserProfile() async {
@@ -34,10 +73,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     setState(() => _isLoading = true);
     try {
-      final doc = await _firestore.collection('users').doc(user.uid).get();
-      if (doc.exists) {
-        _userModel = UserModel.fromMap(doc.data()!);
-        _nameController.text = _userModel!.displayName;
+      final prefNick = await PreferencesService.getNickname();
+      if (prefNick != null && prefNick.isNotEmpty) {
+        _nameController.text = prefNick;
+      } else {
+        final doc = await _firestore.collection('users').doc(user.uid).get();
+        if (doc.exists) {
+          final data = doc.data()!;
+          _nameController.text = data['nickname'] ?? data['displayName'] ?? '';
+        }
+      }
+      final outS = await PreferencesService.getOutgoingSoundEnabled();
+      final inS = await PreferencesService.getIncomingSoundEnabled();
+      if (mounted) {
+        setState(() {
+          _outgoingSound = outS;
+          _incomingSound = inS;
+        });
       }
     } catch (e) {
       debugPrint("Error loading profile: $e");
@@ -49,19 +101,34 @@ class _SettingsScreenState extends State<SettingsScreen> {
     final user = _auth.currentUser;
     if (user == null) return;
 
+    final newAlias = _nameController.text.trim();
+    if (newAlias.isEmpty) return;
+
     setState(() => _isLoading = true);
     try {
-      await _firestore.collection('users').doc(user.uid).update({
-        'displayName': _nameController.text.trim(),
-      });
+      await PreferencesService.saveNickname(newAlias);
+      if (mounted) {
+        context.read<ChatProvider>().setNickname(newAlias);
+      }
+      await _firestore.collection('users').doc(user.uid).set({
+        'nickname': newAlias,
+        'displayName': newAlias,
+      }, SetOptions(merge: true));
+
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('[OK] ALIAS UPDATED')),
+      final accent = context.read<ThemeProvider>().accentColor;
+      CyberHUD.show(
+        context,
+        message: '[OK] ALIAS GÜNCELLENDİ',
+        icon: Icons.check_circle_outline,
+        accentColor: accent,
       );
     } catch (e) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('[ERROR] $e')),
+      CyberHUD.show(
+        context,
+        message: '[HATA] $e',
+        isError: true,
       );
     }
     setState(() => _isLoading = false);
@@ -183,6 +250,126 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                         const SizedBox(height: 32),
 
+                        // Privacy & Stealth Section
+                        Row(
+                          children: [
+                            Icon(Icons.security, color: accentColor, size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              'PRIVACY & STEALTH CONFIG',
+                              style: TextStyle(
+                                color: accentColor.withValues(alpha: 0.5),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: accentColor.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: Consumer<ChatProvider>(
+                                builder: (context, chatProvider, _) {
+                                  return Column(
+                                    children: [
+                                      // Robotic Anonymous Voice
+                                      SwitchListTile(
+                                        title: Text(
+                                          'ROBOTİK SES FİLTRESİ',
+                                          style: TextStyle(
+                                            color: accentColor,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.5,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          'Ses kayıtlarını robotik tonda şifreler, ses kimliğinizi gizler.',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.5),
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                        value: chatProvider.isAnonymousVoice,
+                                        activeThumbColor: accentColor,
+                                        inactiveTrackColor: Colors.black45,
+                                        onChanged: (value) {
+                                          chatProvider.toggleAnonymousVoice(value);
+                                        },
+                                      ),
+                                      Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
+                                      // Tap to reveal
+                                      SwitchListTile(
+                                        title: Text(
+                                          'GİZLİLİK MASKESİ (TAP-TO-REVEAL)',
+                                          style: TextStyle(
+                                            color: accentColor,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.5,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          'Mesajları buğular, yalnızca üzerine basılı tuttuğunuzda gösterir.',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.5),
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                        value: chatProvider.tapToRevealEnabled,
+                                        activeThumbColor: accentColor,
+                                        inactiveTrackColor: Colors.black45,
+                                        onChanged: (value) {
+                                          chatProvider.toggleTapToReveal(value);
+                                        },
+                                      ),
+                                      Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
+                                      // Panic camouflage
+                                      SwitchListTile(
+                                        title: Text(
+                                          'PANİK KAMUFLAJ MODU',
+                                          style: TextStyle(
+                                            color: accentColor,
+                                            fontWeight: FontWeight.bold,
+                                            letterSpacing: 1.5,
+                                            fontSize: 13,
+                                          ),
+                                        ),
+                                        subtitle: Text(
+                                          'Üst bardaki kalkan butonuyla anında çalışan sahte hesap makinesine geçer.',
+                                          style: TextStyle(
+                                            color: Colors.white.withValues(alpha: 0.5),
+                                            fontSize: 10,
+                                          ),
+                                        ),
+                                        value: chatProvider.panicCamouflageEnabled,
+                                        activeThumbColor: accentColor,
+                                        inactiveTrackColor: Colors.black45,
+                                        onChanged: (value) {
+                                          chatProvider.togglePanicCamouflage(value);
+                                        },
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
                         // Eco Mode section
                         Row(
                           children: [
@@ -235,6 +422,98 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 onChanged: (value) {
                                   themeProvider.setAnimationsEnabled(!value);
                                 },
+                              ),
+                            ),
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Audio & Sound FX
+                        Row(
+                          children: [
+                            Icon(Icons.volume_up_outlined, color: accentColor, size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              'AUDIO & SOUND FX',
+                              style: TextStyle(
+                                color: accentColor.withValues(alpha: 0.5),
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                                fontSize: 11,
+                              ),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                          child: BackdropFilter(
+                            filter: ImageFilter.blur(sigmaX: 5, sigmaY: 5),
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.black.withValues(alpha: 0.5),
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: accentColor.withValues(alpha: 0.2),
+                                ),
+                              ),
+                              child: Column(
+                                children: [
+                                  SwitchListTile(
+                                    title: Text(
+                                      'GİDEN MESAJ SESİ',
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.5,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      'Mesaj gönderildiğinde bildirim sesi çalar.',
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.5),
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                    value: _outgoingSound,
+                                    activeThumbColor: accentColor,
+                                    inactiveTrackColor: Colors.black45,
+                                    onChanged: (value) async {
+                                      setState(() => _outgoingSound = value);
+                                      await PreferencesService.saveOutgoingSoundEnabled(value);
+                                      AudioService().updateCachedSettings(outgoing: value);
+                                    },
+                                  ),
+                                  Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
+                                  SwitchListTile(
+                                    title: Text(
+                                      'GELEN MESAJ SESİ',
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontWeight: FontWeight.bold,
+                                        letterSpacing: 1.5,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    subtitle: Text(
+                                      'Yeni mesaj alındığında bildirim sesi çalar.',
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.5),
+                                        fontSize: 10,
+                                      ),
+                                    ),
+                                    value: _incomingSound,
+                                    activeThumbColor: accentColor,
+                                    inactiveTrackColor: Colors.black45,
+                                    onChanged: (value) async {
+                                      setState(() => _incomingSound = value);
+                                      await PreferencesService.saveIncomingSoundEnabled(value);
+                                      AudioService().updateCachedSettings(incoming: value);
+                                    },
+                                  ),
+                                ],
                               ),
                             ),
                           ),
@@ -304,7 +583,159 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           }).toList(),
                         ),
 
-                        const SizedBox(height: 40),
+                        const SizedBox(height: 32),
+
+                        // System Update Section
+                        Text(
+                          'SYSTEM OTA UPDATES',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                            color: accentColor.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: accentColor.withValues(alpha: 0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.cloud_sync_outlined, color: accentColor, size: 28),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'GitHub In-App OTA',
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Otomatik APK & Sürüm Denetimi',
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.5),
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _isCheckingUpdate
+                                  ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: accentColor,
+                                      ),
+                                    )
+                                  : OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: accentColor,
+                                        side: BorderSide(color: accentColor.withValues(alpha: 0.5)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      onPressed: _checkUpdate,
+                                      child: const Text(
+                                        'DENETLE',
+                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                      ),
+                                    ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
+
+                        // Media Cache & Storage Section
+                        Text(
+                          'DATA & STORAGE',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                            color: accentColor.withValues(alpha: 0.8),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.4),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: accentColor.withValues(alpha: 0.2),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            children: [
+                              Icon(Icons.cleaning_services_outlined, color: accentColor, size: 28),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Medya & Geçici Önbellek',
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 13,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      'Ses, resim ve video kalıntıları: $_cacheSize',
+                                      style: TextStyle(
+                                        color: Colors.white.withValues(alpha: 0.5),
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              _isClearingCache
+                                  ? SizedBox(
+                                      width: 20,
+                                      height: 20,
+                                      child: CircularProgressIndicator(
+                                        strokeWidth: 2,
+                                        color: accentColor,
+                                      ),
+                                    )
+                                  : OutlinedButton(
+                                      style: OutlinedButton.styleFrom(
+                                        foregroundColor: Colors.red.shade400,
+                                        side: BorderSide(color: Colors.red.shade400.withValues(alpha: 0.5)),
+                                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                      onPressed: _clearCache,
+                                      child: const Text(
+                                        'TEMİZLE',
+                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                      ),
+                                    ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 32),
 
                         // Save button
                         ClipRRect(
