@@ -11,6 +11,7 @@ import 'package:geolocator/geolocator.dart';
 
 import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/media_service.dart';
 import '../services/location_service.dart';
 import '../services/audio_cache_service.dart';
@@ -40,7 +41,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
   double _uploadProgress = 0.0;
   bool _isMenuExpanded = false;
   bool _isBurnMode = false;
-  
+
   Timer? _typingTimer;
   bool _isTyping = false;
   bool _hasText = false;
@@ -91,7 +92,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         _typingTimer?.cancel();
       }
     }
-    // Only trigger UI rebuild if the send button vs mic button visibility state changes
     if (_hasText != hasTextNow) {
       _hasText = hasTextNow;
       setState(() {});
@@ -136,7 +136,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
       });
       setState(() => _isRecording = true);
     } catch (e) {
-      debugPrint("Record error: $e");
+      debugPrint('Record error: $e');
     }
   }
 
@@ -157,10 +157,11 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
       if (path != null) {
         if (duration < 1) {
           if (mounted) {
+            final strings = context.read<LocaleProvider>().strings;
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Ses kaydı çok kısa, basılı tutarak konuşun.'),
-                duration: Duration(seconds: 1),
+              SnackBar(
+                content: Text(strings.voiceRecordTooShort),
+                duration: const Duration(seconds: 1),
                 behavior: SnackBarBehavior.floating,
               ),
             );
@@ -172,7 +173,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         if (!mounted) return;
         final provider = context.read<ChatProvider>();
 
-        // Create a local pending message
         final localId = const Uuid().v4();
         final tempMsg = Message(
           id: 'temp_$localId',
@@ -194,7 +194,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         _uploadAudioBackground(path, localId);
       }
     } catch (e) {
-      debugPrint("Stop record error: $e");
+      debugPrint('Stop record error: $e');
     }
   }
 
@@ -204,9 +204,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
       final roomId = provider.roomCode;
       if (roomId == null) return;
 
-      final url = await _mediaService.uploadMedia(File(path), roomId, (progress) {
-        // Upload progress callback
-      });
+      final url = await _mediaService.uploadMedia(File(path), roomId, (progress) {});
 
       if (url != null) {
         await AudioCacheService.cacheExistingFile(url, File(path));
@@ -223,7 +221,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         provider.updateLocalMessageStatus(localId, 'failed');
       }
     } catch (e) {
-      debugPrint("Background upload error: $e");
+      debugPrint('Background upload error: $e');
       if (mounted) {
         context.read<ChatProvider>().updateLocalMessageStatus(localId, 'failed');
       }
@@ -250,7 +248,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
     try {
       await _audioRecorder.stop();
     } catch (e) {
-      debugPrint("Cancel record error: $e");
+      debugPrint('Cancel record error: $e');
     }
   }
 
@@ -283,13 +281,13 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
     if (roomId == null || mediaData.isEmpty) return;
 
     setState(() => _isUploading = true);
-    
+
     int totalBytes = 0;
     for (var data in mediaData) {
       final File file = data['file'];
       totalBytes += file.lengthSync();
     }
-    
+
     int uploadedBytes = 0;
     final stopwatch = Stopwatch()..start();
     List<Map<String, dynamic>> mediaList = [];
@@ -299,7 +297,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
       final File file = data['file'];
       final String type = data['type'];
       final File? thumbnail = data['thumbnail'];
-      
+
       final int currentFileSize = file.lengthSync();
       int currentFileUploadedBytes = 0;
 
@@ -312,9 +310,9 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         int delta = bytesForThisFile - currentFileUploadedBytes;
         currentFileUploadedBytes = bytesForThisFile;
         uploadedBytes += delta;
-        
+
         double overallProgress = uploadedBytes / totalBytes;
-        
+
         final elapsedSeconds = stopwatch.elapsed.inSeconds;
         String eta = '';
         if (elapsedSeconds > 1 && uploadedBytes > 0) {
@@ -323,7 +321,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
           final remainingSeconds = (remainingBytes / bytesPerSecond).round();
           eta = '${remainingSeconds}s ETA';
         }
-        
+
         provider.setUploadStatus(true, overallProgress, eta);
         if (mounted) {
           setState(() {
@@ -344,7 +342,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         });
       }
     }
-    
+
     if (mediaList.isNotEmpty) {
       await provider.sendMediaList(
         mediaList,
@@ -354,7 +352,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         },
       );
     }
-    
+
     provider.setUploadStatus(false, 0, '');
     if (mounted) setState(() => _isUploading = false);
   }
@@ -375,6 +373,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
   }
 
   void _showCameraOptions() {
+    final strings = context.read<LocaleProvider>().strings;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.black87,
@@ -386,32 +385,36 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
           children: [
             ListTile(
               leading: const Icon(Icons.camera_alt, color: Color(0xFF159D87)),
-              title: const Text('Take Photo', style: TextStyle(color: Colors.white)),
+              title: Text(strings.takePhoto, style: const TextStyle(color: Colors.white)),
               onTap: () async {
                 Navigator.pop(ctx);
                 final file = await _mediaService.takePhoto();
                 if (file != null) {
                   final compressed = await _mediaService.compressImage(file, false);
                   if (compressed != null) {
-                    await _handleMediaSelection([{"file": compressed, "type": "image"}]);
+                    await _handleMediaSelection([
+                      {'file': compressed, 'type': 'image'},
+                    ]);
                   }
                 }
               },
             ),
             ListTile(
               leading: const Icon(Icons.videocam, color: Color(0xFF159D87)),
-              title: const Text('Record Video', style: TextStyle(color: Colors.white)),
+              title: Text(strings.recordVideo, style: const TextStyle(color: Colors.white)),
               onTap: () async {
                 Navigator.pop(ctx);
                 final file = await _mediaService.recordVideo();
                 if (file != null) {
                   final compressed = await _mediaService.compressVideo(file);
                   final thumbnail = await _mediaService.getVideoThumbnail(file);
-                  await _handleMediaSelection([{
-                    "file": compressed,
-                    "type": "video",
-                    "thumbnail": thumbnail,
-                  }]);
+                  await _handleMediaSelection([
+                    {
+                      'file': compressed,
+                      'type': 'video',
+                      'thumbnail': thumbnail,
+                    },
+                  ]);
                 }
               },
             ),
@@ -422,6 +425,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
   }
 
   Future<void> _sendLocation() async {
+    final strings = context.read<LocaleProvider>().strings;
     setState(() => _isUploading = true);
     try {
       final pos = await LocationService.getCurrentLocation();
@@ -429,8 +433,8 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
       if (pos != null) {
         final provider = context.read<ChatProvider>();
         await provider.sendLocation(
-          pos.latitude, 
-          pos.longitude, 
+          pos.latitude,
+          pos.longitude,
           'Encrypted Location Signal',
           metadata: {
             if (_isBurnMode) 'burnAfterRead': true,
@@ -438,7 +442,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Failed to get location.'), backgroundColor: Colors.red),
+          SnackBar(content: Text(strings.failedToGetLocation), backgroundColor: Colors.red),
         );
       }
     } on LocationDisabledException catch (_) {
@@ -447,22 +451,22 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         context: context,
         builder: (ctx) => AlertDialog(
           backgroundColor: Theme.of(context).cardColor,
-          title: const Text('Location Disabled', style: TextStyle(color: Colors.white)),
-          content: const Text(
-            'Your device location is disabled. Please enable it to send your location.',
-            style: TextStyle(color: Colors.white70),
+          title: Text(strings.locationDisabledTitle, style: const TextStyle(color: Colors.white)),
+          content: Text(
+            strings.locationDisabledBody,
+            style: const TextStyle(color: Colors.white70),
           ),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('CANCEL'),
+              child: Text(strings.cancel),
             ),
             TextButton(
               onPressed: () async {
                 Navigator.pop(ctx);
                 await Geolocator.openLocationSettings();
               },
-              child: const Text('SETTINGS', style: TextStyle(color: Color(0xFF159D87))),
+              child: Text(strings.settingsTitle, style: const TextStyle(color: Color(0xFF159D87))),
             ),
           ],
         ),
@@ -470,7 +474,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Failed to get location.'), backgroundColor: Colors.red),
+        SnackBar(content: Text(strings.failedToGetLocation), backgroundColor: Colors.red),
       );
     }
     if (mounted) setState(() => _isUploading = false);
@@ -480,6 +484,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
     final themeProvider = context.watch<ThemeProvider>();
+    final strings = context.watch<LocaleProvider>().strings;
     final accent = themeProvider.accentColor;
 
     return Container(
@@ -493,7 +498,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Animated Reply Preview Banner
             AnimatedSize(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
@@ -512,11 +516,11 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              "REPLYING TO: ${chatProvider.replyToMessage!.nickname} - ${chatProvider.replyToMessage!.text}",
+                              '${strings.replyingToPrefix}: ${chatProvider.replyToMessage!.nickname} - ${chatProvider.replyToMessage!.text}',
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
-                                fontSize: 12, 
+                                fontSize: 12,
                                 color: accent.withValues(alpha: 0.9),
                                 fontFamily: 'Courier',
                               ),
@@ -534,8 +538,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                     )
                   : const SizedBox.shrink(),
             ),
-
-            // Upload Progress Bar
             if (_isUploading || chatProvider.isUploadingMedia)
               Padding(
                 padding: const EdgeInsets.only(bottom: 8.0),
@@ -545,7 +547,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
-                          'ENCRYPTING & UPLOADING...',
+                          strings.encryptingUploading,
                           style: TextStyle(color: accent, fontSize: 10, fontWeight: FontWeight.bold, fontFamily: 'Courier'),
                         ),
                         if (chatProvider.uploadEta.isNotEmpty)
@@ -565,11 +567,8 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                   ],
                 ),
               ),
-
-            // Main Input Row
             Row(
               children: [
-                // Minimalist Recording Bar
                 if (_isRecording)
                   Expanded(
                     child: Container(
@@ -588,7 +587,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                       ),
                       child: Row(
                         children: [
-                          // Pulsing red recording dot
                           TweenAnimationBuilder<double>(
                             tween: Tween(begin: 0.3, end: 1.0),
                             duration: const Duration(milliseconds: 500),
@@ -627,7 +625,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                               children: [
                                 Icon(Icons.chevron_left, color: Colors.redAccent.withValues(alpha: 0.7), size: 18),
                                 Text(
-                                  '< SLIDE TO CANCEL',
+                                  strings.slideToCancel,
                                   style: TextStyle(
                                     color: Colors.redAccent.withValues(alpha: 0.7),
                                     fontFamily: 'Courier',
@@ -643,7 +641,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                     ),
                   )
                 else ...[
-                  // Minimalist Menu Toggle
                   BouncyTap(
                     onTap: () {
                       HapticFeedback.selectionClick();
@@ -666,8 +663,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                       ),
                     ),
                   ),
-
-                  // Expanded Tools
                   AnimatedSize(
                     duration: const Duration(milliseconds: 250),
                     curve: Curves.easeOutCubic,
@@ -675,17 +670,35 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                         ? Row(
                             mainAxisSize: MainAxisSize.min,
                             children: [
-                              BouncyTap(child: IconButton(icon: const Icon(Icons.camera_alt), onPressed: _showCameraOptions, color: accent, tooltip: 'Camera')),
-                              BouncyTap(child: IconButton(icon: const Icon(Icons.attach_file), onPressed: _pickMedia, color: accent, tooltip: 'Attach File')),
-                              BouncyTap(child: IconButton(icon: const Icon(Icons.location_on), onPressed: _sendLocation, color: accent, tooltip: 'Send Location')),
+                              BouncyTap(
+                                child: IconButton(
+                                  icon: const Icon(Icons.camera_alt),
+                                  onPressed: _showCameraOptions,
+                                  color: accent,
+                                  tooltip: strings.cameraTooltip,
+                                ),
+                              ),
+                              BouncyTap(
+                                child: IconButton(
+                                  icon: const Icon(Icons.attach_file),
+                                  onPressed: _pickMedia,
+                                  color: accent,
+                                  tooltip: strings.attachFileTooltip,
+                                ),
+                              ),
+                              BouncyTap(
+                                child: IconButton(
+                                  icon: const Icon(Icons.location_on),
+                                  onPressed: _sendLocation,
+                                  color: accent,
+                                  tooltip: strings.sendLocationTooltip,
+                                ),
+                              ),
                             ],
                           )
                         : const SizedBox.shrink(),
                   ),
-
                   const SizedBox(width: 4),
-
-                  // Minimalist Terminal-Style Data Input
                   Expanded(
                     child: AnimatedContainer(
                       duration: const Duration(milliseconds: 200),
@@ -735,8 +748,8 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                                   fontSize: 14,
                                 ),
                                 hintText: chatProvider.replyToMessage != null
-                                    ? 'REPLYING...'
-                                    : (_isBurnMode ? 'BURN MODE ACTIVE...' : 'ENTER DATA...'),
+                                    ? strings.replyingHint
+                                    : (_isBurnMode ? strings.burnModeActiveHint : strings.enterDataHint),
                                 hintStyle: TextStyle(
                                   color: (_isBurnMode ? Colors.orangeAccent : accent).withValues(alpha: 0.4),
                                   fontFamily: 'Courier',
@@ -773,10 +786,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                     ),
                   ),
                 ],
-
                 const SizedBox(width: 4),
-
-                // Right Button: Fluid Morph between Send & Mic
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   transitionBuilder: (child, anim) => ScaleTransition(
@@ -812,7 +822,7 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
                             HapticFeedback.selectionClick();
                             CyberHUD.show(
                               context,
-                              message: '>_ BASILI TUTARAK KAYDEDİN, İPTAL İÇİN SOLA KAYDIRIN',
+                              message: strings.holdToRecordToast,
                               icon: Icons.mic_rounded,
                               accentColor: accent,
                             );

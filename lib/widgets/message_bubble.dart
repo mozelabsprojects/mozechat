@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/message.dart';
 import '../providers/chat_provider.dart';
+import '../providers/locale_provider.dart';
 import '../services/location_service.dart';
 import '../screens/photo_view_screen.dart';
 import '../screens/video_player_screen.dart';
@@ -56,8 +57,12 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
       vsync: this,
       duration: const Duration(milliseconds: 800),
     );
-    _burnScale = Tween<double>(begin: 1.0, end: 1.2).animate(CurvedAnimation(parent: _burnAnimController, curve: Curves.easeIn));
-    _burnOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(CurvedAnimation(parent: _burnAnimController, curve: Curves.easeOut));
+    _burnScale = Tween<double>(begin: 1.0, end: 1.2).animate(
+      CurvedAnimation(parent: _burnAnimController, curve: Curves.easeIn),
+    );
+    _burnOpacity = Tween<double>(begin: 1.0, end: 0.0).animate(
+      CurvedAnimation(parent: _burnAnimController, curve: Curves.easeOut),
+    );
     _checkBurn();
   }
 
@@ -77,7 +82,9 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
   }
 
   void _checkBurn() {
-    if (widget.msg.metadata?['burnAfterRead'] == true && widget.msg.status == 'read' && !widget.msg.isDeleted) {
+    if (widget.msg.metadata?['burnAfterRead'] == true &&
+        widget.msg.status == 'read' &&
+        !widget.msg.isDeleted) {
       _burnTimer ??= Timer.periodic(const Duration(seconds: 1), (timer) {
         if (!mounted) {
           timer.cancel();
@@ -103,16 +110,32 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
 
     switch (widget.msg.status) {
       case 'pending':
-        statusWidget = Icon(Icons.access_time_rounded, size: 11, color: widget.textColor.withValues(alpha: 0.5));
+        statusWidget = Icon(
+          Icons.access_time_rounded,
+          size: 11,
+          color: widget.textColor.withValues(alpha: 0.5),
+        );
         break;
       case 'failed':
-        statusWidget = const Icon(Icons.error_outline_rounded, size: 13, color: Colors.redAccent);
+        statusWidget = const Icon(
+          Icons.error_outline_rounded,
+          size: 13,
+          color: Colors.redAccent,
+        );
         break;
       case 'sent':
-        statusWidget = Icon(Icons.check_rounded, size: 14, color: widget.textColor.withValues(alpha: 0.6));
+        statusWidget = Icon(
+          Icons.check_rounded,
+          size: 14,
+          color: widget.textColor.withValues(alpha: 0.6),
+        );
         break;
       case 'delivered':
-        statusWidget = Icon(Icons.done_all_rounded, size: 14, color: widget.textColor.withValues(alpha: 0.6));
+        statusWidget = Icon(
+          Icons.done_all_rounded,
+          size: 14,
+          color: widget.textColor.withValues(alpha: 0.6),
+        );
         break;
       case 'read':
         statusWidget = Row(
@@ -121,11 +144,18 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             if (widget.msg.metadata?['burnAfterRead'] == true)
               Padding(
                 padding: const EdgeInsets.only(right: 4.0),
-                child: Text('🔥$_timeLeft', style: const TextStyle(color: Colors.orangeAccent, fontSize: 10, fontWeight: FontWeight.bold)),
+                child: Text(
+                  '🔥$_timeLeft',
+                  style: const TextStyle(
+                    color: Colors.orangeAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
               ),
             const Icon(
-              Icons.done_all_rounded, 
-              size: 14, 
+              Icons.done_all_rounded,
+              size: 14,
               color: Colors.cyanAccent,
               shadows: [Shadow(color: Colors.cyanAccent, blurRadius: 8)],
             ),
@@ -133,7 +163,11 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         );
         break;
       default:
-        statusWidget = Icon(Icons.check_rounded, size: 14, color: widget.textColor.withValues(alpha: 0.6));
+        statusWidget = Icon(
+          Icons.check_rounded,
+          size: 14,
+          color: widget.textColor.withValues(alpha: 0.6),
+        );
     }
 
     return Padding(
@@ -147,12 +181,15 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
     if (widget.msg.isDeleted && widget.msg.metadata?['burnAfterRead'] == true) {
       return const SizedBox.shrink();
     }
-    
+
+    final strings = context.watch<LocaleProvider>().strings;
     final timeString = DateFormat('HH:mm').format(widget.msg.timestamp);
     final isBurn = widget.msg.metadata?['burnAfterRead'] == true && !widget.msg.isDeleted;
     final bgColor = isBurn ? Colors.orangeAccent.withValues(alpha: 0.1) : widget.currentBg;
     final bdrColor = isBurn ? Colors.orangeAccent : widget.borderColor;
-    final shadowColor = isBurn ? Colors.orangeAccent.withValues(alpha: 0.4) : widget.borderColor.withValues(alpha: 0.2);
+    final shadowColor = isBurn
+        ? Colors.orangeAccent.withValues(alpha: 0.4)
+        : widget.borderColor.withValues(alpha: 0.2);
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
@@ -192,207 +229,210 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                     ),
                   ],
                 ),
-              child: Stack(
-                children: [
-                  if (!widget.msg.isDeleted)
-                    Positioned.fill(
-                      child: ClipRRect(
-                        borderRadius: BorderRadius.only(
-                          topLeft: widget.isMe ? const Radius.circular(16) : const Radius.circular(4),
-                          topRight: const Radius.circular(16),
-                          bottomLeft: const Radius.circular(16),
-                          bottomRight: widget.isMe ? const Radius.circular(4) : const Radius.circular(16),
-                        ),
-                        child: widget.isBot
-                            ? Container()
-                            : Opacity(
-                                opacity: 0.05,
-                                child: CustomPaint(
-                                  painter: _CyberGridPainter(color: widget.textColor),
+                child: Stack(
+                  children: [
+                    if (!widget.msg.isDeleted)
+                      Positioned.fill(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.only(
+                            topLeft: widget.isMe ? const Radius.circular(16) : const Radius.circular(4),
+                            topRight: const Radius.circular(16),
+                            bottomLeft: const Radius.circular(16),
+                            bottomRight: widget.isMe ? const Radius.circular(4) : const Radius.circular(16),
+                          ),
+                          child: widget.isBot
+                              ? Container()
+                              : Opacity(
+                                  opacity: 0.05,
+                                  child: CustomPaint(
+                                    painter: _CyberGridPainter(color: widget.textColor),
+                                  ),
                                 ),
-                              ),
+                        ),
                       ),
-                    ),
-                  Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        if (!widget.isMe && !widget.isBot)
-                          Padding(
-                            padding: const EdgeInsets.only(bottom: 4.0),
-                            child: Text(
-                              widget.msg.nickname,
-                              style: TextStyle(
-                                color: widget.isBot
-                                    ? Colors.white
-                                    : widget.textColor.withValues(alpha: 0.8),
-                                fontWeight: FontWeight.bold,
-                                fontSize: 12,
-                                letterSpacing: 1,
-                                fontFamily: 'Courier',
-                              ),
-                            ),
-                          ),
-                        if (widget.replyText != null)
-                          Container(
-                            margin: const EdgeInsets.only(bottom: 8),
-                            padding: const EdgeInsets.all(8),
-                            decoration: BoxDecoration(
-                              border: Border(
-                                left: BorderSide(color: widget.textColor, width: 2),
-                              ),
-                              color: Colors.black45,
-                              borderRadius: BorderRadius.circular(4),
-                            ),
-                            child: Text(
-                              widget.replyText!,
-                              style: const TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey,
-                                fontStyle: FontStyle.italic,
-                              ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                          ),
-                        Wrap(
-                          alignment: WrapAlignment.end,
-                          crossAxisAlignment: WrapCrossAlignment.end,
-                          children: [
+                    Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          if (!widget.isMe && !widget.isBot)
                             Padding(
-                              padding: const EdgeInsets.only(right: 8.0, bottom: 2.0),
-                              child: Consumer<ChatProvider>(
-                                builder: (context, chatProv, child) {
-                                  final bool isMasked = chatProv.tapToRevealEnabled && !_isRevealed && !widget.msg.isDeleted;
-                                  if (!chatProv.tapToRevealEnabled || widget.msg.isDeleted) {
-                                    return _buildContent(context);
-                                  }
-
-                                  return GestureDetector(
-                                    onTapDown: (_) {
-                                      HapticFeedback.selectionClick();
-                                      setState(() => _isRevealed = true);
-                                    },
-                                    onTapUp: (_) {
-                                      setState(() => _isRevealed = false);
-                                    },
-                                    onTapCancel: () {
-                                      setState(() => _isRevealed = false);
-                                    },
-                                    child: ImageFiltered(
-                                      imageFilter: ImageFilter.blur(
-                                        sigmaX: isMasked ? 9 : 0,
-                                        sigmaY: isMasked ? 9 : 0,
-                                      ),
-                                      child: _buildContent(context),
-                                    ),
-                                  );
-                                },
+                              padding: const EdgeInsets.only(bottom: 4.0),
+                              child: Text(
+                                widget.msg.nickname,
+                                style: TextStyle(
+                                  color: widget.isBot
+                                      ? Colors.white
+                                      : widget.textColor.withValues(alpha: 0.8),
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 12,
+                                  letterSpacing: 1,
+                                  fontFamily: 'Courier',
+                                ),
                               ),
                             ),
-                            if (widget.msg.reactions != null && widget.msg.reactions!.isNotEmpty)
+                          if (widget.replyText != null)
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 8),
+                              padding: const EdgeInsets.all(8),
+                              decoration: BoxDecoration(
+                                border: Border(
+                                  left: BorderSide(color: widget.textColor, width: 2),
+                                ),
+                                color: Colors.black45,
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Text(
+                                widget.replyText!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                  fontStyle: FontStyle.italic,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                          Wrap(
+                            alignment: WrapAlignment.end,
+                            crossAxisAlignment: WrapCrossAlignment.end,
+                            children: [
                               Padding(
-                                padding: const EdgeInsets.only(top: 4.0, right: 8.0),
-                                child: Wrap(
-                                  spacing: 4,
-                                  children: widget.msg.reactions!.entries.map((entry) {
-                                    return Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                                      decoration: BoxDecoration(
-                                        color: Colors.black45,
-                                        borderRadius: BorderRadius.circular(12),
-                                        border: Border.all(color: Colors.white24),
+                                padding: const EdgeInsets.only(right: 8.0, bottom: 2.0),
+                                child: Consumer<ChatProvider>(
+                                  builder: (context, chatProv, child) {
+                                    final bool isMasked =
+                                        chatProv.tapToRevealEnabled &&
+                                        !_isRevealed &&
+                                        !widget.msg.isDeleted;
+                                    if (!chatProv.tapToRevealEnabled || widget.msg.isDeleted) {
+                                      return _buildContent(context);
+                                    }
+
+                                    return GestureDetector(
+                                      onTapDown: (_) {
+                                        HapticFeedback.selectionClick();
+                                        setState(() => _isRevealed = true);
+                                      },
+                                      onTapUp: (_) {
+                                        setState(() => _isRevealed = false);
+                                      },
+                                      onTapCancel: () {
+                                        setState(() => _isRevealed = false);
+                                      },
+                                      child: ImageFiltered(
+                                        imageFilter: ImageFilter.blur(
+                                          sigmaX: isMasked ? 9 : 0,
+                                          sigmaY: isMasked ? 9 : 0,
+                                        ),
+                                        child: _buildContent(context),
                                       ),
-                                      child: Text(entry.value, style: const TextStyle(fontSize: 12)),
                                     );
-                                  }).toList(),
+                                  },
                                 ),
                               ),
-                            Row(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                if (widget.msg.isStarred)
-                                  const Padding(
-                                    padding: EdgeInsets.only(right: 4.0),
-                                    child: Icon(
-                                      Icons.star,
-                                      color: Colors.yellow,
-                                      size: 14,
-                                    ),
-                                  ),
-                                Text(
-                                  timeString,
-                                  style: TextStyle(
-                                    fontSize: 10,
-                                    color: widget.textColor.withValues(alpha: 0.6),
+                              if (widget.msg.reactions != null && widget.msg.reactions!.isNotEmpty)
+                                Padding(
+                                  padding: const EdgeInsets.only(top: 4.0, right: 8.0),
+                                  child: Wrap(
+                                    spacing: 4,
+                                    children: widget.msg.reactions!.entries.map((entry) {
+                                      return Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: Colors.black45,
+                                          borderRadius: BorderRadius.circular(12),
+                                          border: Border.all(color: Colors.white24),
+                                        ),
+                                        child: Text(entry.value, style: const TextStyle(fontSize: 12)),
+                                      );
+                                    }).toList(),
                                   ),
                                 ),
-                                if (widget.msg.isEdited)
-                                  Padding(
-                                    padding: const EdgeInsets.only(left: 4.0),
-                                    child: Text(
-                                      "(edited)",
-                                      style: TextStyle(
-                                        fontSize: 9,
-                                        fontStyle: FontStyle.italic,
-                                        color: widget.textColor.withValues(alpha: 0.5),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  if (widget.msg.isStarred)
+                                    const Padding(
+                                      padding: EdgeInsets.only(right: 4.0),
+                                      child: Icon(
+                                        Icons.star,
+                                        color: Colors.yellow,
+                                        size: 14,
                                       ),
                                     ),
-                                  ),
-                                _buildStatusIcon(),
-                              ],
-                            ),
-                          ],
-                        ),
-                        if (widget.msg.status == 'failed' && widget.onRetry != null)
-                          Padding(
-                            padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
-                            child: Center(
-                              child: GestureDetector(
-                                onTap: widget.onRetry,
-                                child: Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 12,
-                                    vertical: 6,
-                                  ),
-                                  decoration: BoxDecoration(
-                                    color: Colors.redAccent.withValues(alpha: 0.1),
-                                    borderRadius: BorderRadius.circular(12),
-                                    border: Border.all(
-                                      color: Colors.redAccent.withValues(alpha: 0.5),
+                                  Text(
+                                    timeString,
+                                    style: TextStyle(
+                                      fontSize: 10,
+                                      color: widget.textColor.withValues(alpha: 0.6),
                                     ),
                                   ),
-                                  child: const Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.refresh,
-                                        size: 16,
-                                        color: Colors.redAccent,
-                                      ),
-                                      SizedBox(width: 6),
-                                      Text(
-                                        'Tap to retry',
+                                  if (widget.msg.isEdited)
+                                    Padding(
+                                      padding: const EdgeInsets.only(left: 4.0),
+                                      child: Text(
+                                        strings.editedLabel,
                                         style: TextStyle(
-                                          color: Colors.redAccent,
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.bold,
+                                          fontSize: 9,
+                                          fontStyle: FontStyle.italic,
+                                          color: widget.textColor.withValues(alpha: 0.5),
                                         ),
                                       ),
-                                    ],
+                                    ),
+                                  _buildStatusIcon(),
+                                ],
+                              ),
+                            ],
+                          ),
+                          if (widget.msg.status == 'failed' && widget.onRetry != null)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 8.0, bottom: 4.0),
+                              child: Center(
+                                child: GestureDetector(
+                                  onTap: widget.onRetry,
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 12,
+                                      vertical: 6,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.redAccent.withValues(alpha: 0.1),
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: Colors.redAccent.withValues(alpha: 0.5),
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        const Icon(
+                                          Icons.refresh,
+                                          size: 16,
+                                          color: Colors.redAccent,
+                                        ),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          strings.tapToRetry,
+                                          style: const TextStyle(
+                                            color: Colors.redAccent,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 ),
                               ),
                             ),
-                          ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
-          ),
           ),
         ],
       ),
@@ -400,7 +440,22 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
   }
 
   Widget _buildContent(BuildContext context) {
-    if (widget.msg.type == 'media_group' && widget.msg.mediaList != null && widget.msg.mediaList!.isNotEmpty) {
+    final strings = context.watch<LocaleProvider>().strings;
+
+    if (widget.msg.isDeleted) {
+      return Text(
+        strings.messageDeletedText,
+        style: TextStyle(
+          fontSize: 15,
+          fontStyle: FontStyle.italic,
+          color: widget.textColor.withValues(alpha: 0.6),
+        ),
+      );
+    }
+
+    if (widget.msg.type == 'media_group' &&
+        widget.msg.mediaList != null &&
+        widget.msg.mediaList!.isNotEmpty) {
       return _buildMediaGrid(context, widget.msg.mediaList!);
     } else if (widget.msg.type == 'image' && widget.msg.mediaUrl != null) {
       return GestureDetector(
@@ -410,8 +465,8 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               .where((m) => m.type == 'image' && m.mediaUrl != null)
               .toList()
               .reversed
-              .toList(); // Chronological order
-          
+              .toList();
+
           final initialIndex = allImageMsgs.indexWhere((m) => m.id == widget.msg.id);
 
           Navigator.push(
@@ -493,7 +548,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                 const Icon(Icons.location_on, color: Colors.redAccent),
                 const SizedBox(width: 8),
                 Text(
-                  '[ LOCATION SIGNAL ENCRYPTED ]',
+                  strings.locationSignalEncrypted,
                   style: TextStyle(color: widget.textColor, fontSize: 12),
                 ),
               ],
@@ -514,7 +569,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               widget.msg.locationLat!,
               widget.msg.locationLng!,
             ),
-            child: const Text('OPEN MAP'),
+            child: Text(strings.openMapBtn),
           ),
         ],
       );
@@ -525,7 +580,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
           children: [
             const Icon(Icons.mic, color: Colors.grey),
             const SizedBox(width: 8),
-            Text("Ses yükleniyor...", style: TextStyle(color: widget.textColor)),
+            Text(strings.voiceUploading, style: TextStyle(color: widget.textColor)),
           ],
         );
       } else if (widget.msg.status == 'failed') {
@@ -535,8 +590,8 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             const Icon(Icons.error, color: Colors.redAccent),
             const SizedBox(width: 8),
             Text(
-              "Ses gönderilemedi.",
-              style: TextStyle(color: Colors.redAccent),
+              strings.voiceSendFailed,
+              style: const TextStyle(color: Colors.redAccent),
             ),
           ],
         );
@@ -548,23 +603,73 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         isMe: widget.isMe,
         isAnonymous: widget.msg.metadata?['voiceFilter'] == 'anonymous',
       );
+    } else if (widget.msg.text.startsWith('📞')) {
+      final lowerText = widget.msg.text.toLowerCase();
+      final isEnded = lowerText.contains('sonlandırıldı') || lowerText.contains('ended');
+      String cleanText;
+      if (isEnded) {
+        final durMatch = RegExp(r'(\d{2}:\d{2})').firstMatch(widget.msg.text);
+        final dur = durMatch?.group(1);
+        cleanText = dur != null
+            ? strings.callEndedMsg(dur).replaceFirst('📞', '').trim()
+            : widget.msg.text.replaceFirst('📞', '').trim();
+      } else {
+        cleanText = strings.callStartedMsg.replaceFirst('📞', '').trim();
+      }
+      return Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: (isEnded ? Colors.grey : const Color(0xFF159D87)).withValues(alpha: 0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              isEnded ? Icons.call_end_rounded : Icons.phone_in_talk_rounded,
+              size: 18,
+              color: isEnded ? widget.textColor.withValues(alpha: 0.7) : const Color(0xFF159D87),
+            ),
+          ),
+          const SizedBox(width: 10),
+          Flexible(
+            child: Text(
+              cleanText,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: widget.textColor,
+              ),
+            ),
+          ),
+        ],
+      );
     } else {
-      Widget textWidget = Text(
-        widget.msg.text,
+      String displayText = widget.msg.text;
+      if (widget.msg.isDeleted ||
+          widget.msg.type == 'deleted' ||
+          displayText == '🚫 This message was deleted.' ||
+          displayText == '🚫 Bu mesaj silindi.' ||
+          displayText == 'Bu mesaj silindi') {
+        displayText = strings.messageDeletedText;
+      } else if (displayText == '[Şifre Çözülemedi]' || displayText == '[Decryption Failed]') {
+        displayText = strings.decryptionFailedText;
+      } else if (displayText == '[Encrypted Message]' || displayText == '[Şifreli Mesaj]') {
+        displayText = strings.encryptedMessageFallback;
+      }
+      return Text(
+        displayText,
         style: TextStyle(
           fontSize: 16,
-          fontStyle: widget.msg.isDeleted ? FontStyle.italic : FontStyle.normal,
-          color: widget.msg.isDeleted ? widget.textColor.withValues(alpha: 0.6) : widget.textColor,
+          color: widget.textColor,
         ),
       );
-
-      return textWidget;
     }
   }
 
   Widget _buildMediaGrid(BuildContext context, List<Map<String, dynamic>> mediaList) {
     int displayCount = mediaList.length > 4 ? 4 : mediaList.length;
-    
+
     return GestureDetector(
       onTap: () {
         Navigator.push(
@@ -591,7 +696,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
             final item = mediaList[index];
             final type = item['type'];
             final url = type == 'video' ? (item['thumbnailUrl'] ?? '') : item['url'];
-            
+
             return Stack(
               fit: StackFit.expand,
               children: [
@@ -616,7 +721,11 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                     child: Center(
                       child: Text(
                         '+${mediaList.length - 4}',
-                        style: const TextStyle(color: Colors.white, fontSize: 24, fontWeight: FontWeight.bold),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
                     ),
                   ),
@@ -641,11 +750,11 @@ class _CyberGridPainter extends CustomPainter {
       ..strokeWidth = 1.0;
 
     const double spacing = 20.0;
-    
+
     for (double i = 0; i < size.width; i += spacing) {
       canvas.drawLine(Offset(i, 0), Offset(i, size.height), paint);
     }
-    
+
     for (double i = 0; i < size.height; i += spacing) {
       canvas.drawLine(Offset(0, i), Offset(size.width, i), paint);
     }

@@ -1,7 +1,9 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:video_player/video_player.dart';
+import '../providers/locale_provider.dart';
 import '../services/media_service.dart';
 
 class MediaPreviewScreen extends StatefulWidget {
@@ -29,9 +31,11 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
   Future<void> _loadFiles() async {
     for (int i = 0; i < widget.assets.length; i++) {
       final file = await widget.assets[i].file;
-      setState(() {
-        _files[i] = file;
-      });
+      if (mounted) {
+        setState(() {
+          _files[i] = file;
+        });
+      }
     }
   }
 
@@ -40,7 +44,7 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
     if (file == null) return;
 
     final cropped = await _mediaService.cropImage(file);
-    if (cropped != null) {
+    if (cropped != null && mounted) {
       setState(() {
         _files[_currentIndex] = cropped;
       });
@@ -61,14 +65,14 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
           final compressedVideo = await _mediaService.compressVideo(file);
           final thumbnail = await _mediaService.getVideoThumbnail(file);
           finalData.add({
-            "file": compressedVideo,
-            "thumbnail": thumbnail,
-            "type": "video",
+            'file': compressedVideo,
+            'thumbnail': thumbnail,
+            'type': 'video',
           });
         } else {
           final compressed = await _mediaService.compressImage(file, _isHD);
           if (compressed != null) {
-            finalData.add({"file": compressed, "type": "image"});
+            finalData.add({'file': compressed, 'type': 'image'});
           }
         }
       }
@@ -80,18 +84,19 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     final currentFile = _files.isNotEmpty ? _files[_currentIndex] : null;
 
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('EDIT MEDIA', style: TextStyle(letterSpacing: 2)),
+        title: Text(strings.editMediaTitle, style: const TextStyle(letterSpacing: 2)),
         backgroundColor: Colors.black,
         actions: [
           IconButton(
             icon: const Icon(Icons.crop),
             onPressed: _cropCurrent,
-            tooltip: 'Crop',
+            tooltip: strings.cropTooltip,
           ),
         ],
       ),
@@ -105,8 +110,8 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
                   child: currentFile == null
                       ? const Center(child: CircularProgressIndicator())
                       : widget.assets[_currentIndex].type == AssetType.video
-                      ? VideoPreviewWidget(file: currentFile)
-                      : Image.file(currentFile, fit: BoxFit.contain),
+                          ? VideoPreviewWidget(file: currentFile)
+                          : Image.file(currentFile, fit: BoxFit.contain),
                 ),
                 if (_files.length > 1)
                   SizedBox(
@@ -144,8 +149,7 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
                                         height: 80,
                                         fit: BoxFit.cover,
                                       ),
-                                      if (widget.assets[i].type ==
-                                          AssetType.video)
+                                      if (widget.assets[i].type == AssetType.video)
                                         const Center(
                                           child: Icon(
                                             Icons.play_circle_fill,
@@ -169,12 +173,10 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
                       scrollDirection: Axis.horizontal,
                       child: Row(
                         children: [
-                          const Text('QUALITY: NORMAL'),
+                          Text(strings.qualityNormal),
                           Switch(
                             value: _isHD,
-                            activeTrackColor: const Color(
-                              0xFF159D87,
-                            ).withValues(alpha: 0.5),
+                            activeTrackColor: const Color(0xFF159D87).withValues(alpha: 0.5),
                             activeThumbColor: const Color(0xFF159D87),
                             onChanged: (val) => setState(() => _isHD = val),
                           ),
@@ -193,7 +195,7 @@ class _MediaPreviewScreenState extends State<MediaPreviewScreen> {
                             ),
                             onPressed: _send,
                             icon: const Icon(Icons.send),
-                            label: const Text('ENCRYPT & SEND'),
+                            label: Text(strings.encryptAndSendBtn),
                           ),
                         ],
                       ),
@@ -222,9 +224,11 @@ class _VideoPreviewWidgetState extends State<VideoPreviewWidget> {
     super.initState();
     _controller = VideoPlayerController.file(widget.file)
       ..initialize().then((_) {
-        setState(() {});
-        _controller.play();
-        _controller.setLooping(true);
+        if (mounted) {
+          setState(() {});
+          _controller.play();
+          _controller.setLooping(true);
+        }
       });
   }
 
@@ -235,9 +239,11 @@ class _VideoPreviewWidgetState extends State<VideoPreviewWidget> {
       _controller.dispose();
       _controller = VideoPlayerController.file(widget.file)
         ..initialize().then((_) {
-          setState(() {});
-          _controller.play();
-          _controller.setLooping(true);
+          if (mounted) {
+            setState(() {});
+            _controller.play();
+            _controller.setLooping(true);
+          }
         });
     }
   }

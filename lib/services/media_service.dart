@@ -9,7 +9,9 @@ import 'package:uuid/uuid.dart';
 import 'package:wechat_assets_picker/wechat_assets_picker.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:video_compress/video_compress.dart';
+import '../utils/app_strings.dart';
 import 'crypto_service.dart';
+import 'preferences_service.dart';
 
 class MediaService {
   final FirebaseStorage _storage = FirebaseStorage.instance;
@@ -59,13 +61,14 @@ class MediaService {
 
   /// Crop an image
   Future<File?> cropImage(File imageFile) async {
+    final strings = AppStrings(await PreferencesService.getLanguage());
     final croppedFile = await ImageCropper().cropImage(
       sourcePath: imageFile.path,
       compressFormat: ImageCompressFormat.jpg,
       compressQuality: 100,
       uiSettings: [
         AndroidUiSettings(
-          toolbarTitle: 'Edit Media',
+          toolbarTitle: strings.editMediaTitle,
           toolbarColor: Colors.black,
           toolbarWidgetColor: const Color(0xFF159D87),
           initAspectRatio: CropAspectRatioPreset.original,
@@ -74,7 +77,7 @@ class MediaService {
           backgroundColor: Colors.black,
           dimmedLayerColor: Colors.black54,
         ),
-        IOSUiSettings(title: 'Edit Media'),
+        IOSUiSettings(title: strings.editMediaTitle),
       ],
     );
     if (croppedFile != null) {

@@ -13,8 +13,8 @@ import '../services/e2ee_service.dart';
 import '../services/crypto_service.dart';
 import '../services/preferences_service.dart';
 import '../services/notification_service.dart';
-import '../services/bot_service.dart';
 import '../services/audio_service.dart';
+import '../utils/app_strings.dart';
 
 class ChatProvider extends ChangeNotifier {
   final ChatRepository _repository = ChatRepository();
@@ -22,7 +22,6 @@ class ChatProvider extends ChangeNotifier {
   String? _nickname;
   String? _roomCode;
   String? _currentAesKeyBase64;
-  DateTime? _roomJoinTime;
   String? _errorMessage;
   bool _isLoading = false;
 
@@ -31,7 +30,7 @@ class ChatProvider extends ChangeNotifier {
   double _uploadProgress = 0.0;
   String _uploadEta = '';
   DateTime _lastUploadNotify = DateTime(0);
-  
+
   bool get isUploadingMedia => _isUploadingMedia;
   double get uploadProgress => _uploadProgress;
   String get uploadEta => _uploadEta;
@@ -45,20 +44,15 @@ class ChatProvider extends ChangeNotifier {
   bool _isOtherOnline = false;
   bool _isOtherTyping = false;
   DateTime? _otherLastSeen;
-  String? _lastMessageId; // Yeni mesajları takip etmek için
-  Message? _replyToMessage; // Yanıtlanan mesaj
-  bool _isUserInChatScreen = false; // Kullanıcı sohbet ekranında mı?
-  String _backgroundStyle = 'solid'; // matrix, solid, gradient
-  
-  BotService? _botService;
-  final Set<String> _processedCommandIds = {};
+  String? _lastMessageId;
+  Message? _replyToMessage;
+  bool _isUserInChatScreen = false;
+  String _backgroundStyle = 'solid';
 
   Future<void> _playSound(String path) async {
     await AudioService().playSound(path);
   }
 
-
-  // God Mode Features
   List<String> _notes = [];
 
   // Cached messages list (dirty flag pattern)
@@ -99,7 +93,7 @@ class ChatProvider extends ChangeNotifier {
 
   bool _panicCamouflageEnabled = false;
   bool get panicCamouflageEnabled => _panicCamouflageEnabled;
-  
+
   void toggleAnonymousVoice(bool val) {
     _isAnonymousVoice = val;
     PreferencesService.saveAnonymousVoiceEnabled(val);
@@ -117,7 +111,7 @@ class ChatProvider extends ChangeNotifier {
     PreferencesService.savePanicCamouflageEnabled(val);
     notifyListeners();
   }
-  
+
   bool get hasMoreMessages => _firestoreMessages.length >= _messageLimit;
 
   void loadMoreMessages() {
@@ -133,29 +127,6 @@ class ChatProvider extends ChangeNotifier {
     _isAnonymousVoice = await PreferencesService.getAnonymousVoiceEnabled();
     _tapToRevealEnabled = await PreferencesService.getTapToRevealEnabled();
     _panicCamouflageEnabled = await PreferencesService.getPanicCamouflageEnabled();
-    
-    _botService = BotService(
-      sendBotMessage: (msg) {
-        sendBotMessage(msg);
-      },
-      clearMessages: (n) {
-        if (_roomCode != null) _repository.deleteLastNMessages(_roomCode!, n, aesKeyBase64: _currentAesKeyBase64);
-      },
-      addNote: (note) {
-        if (_roomCode != null) _repository.addNoteToRoom(_roomCode!, note);
-      },
-      getNotes: () => notes,
-      scheduleReminder: (msg, secs) {
-        Future.delayed(Duration(seconds: secs), () {
-          sendBotMessage("⏰ Hatırlatma: $msg");
-          NotificationService.showMessageNotification(
-            title: "Moze bot alarm",
-            body: msg,
-            payload: _roomCode ?? 'unknown',
-          );
-        });
-      },
-    );
     notifyListeners();
   }
 
@@ -229,7 +200,7 @@ class ChatProvider extends ChangeNotifier {
       _replyToMessage = null;
       notifyListeners();
       const initialStatus = 'sent';
-      
+
       final enhancedMetadata = metadata ?? {};
       enhancedMetadata['mediaList'] = mediaList;
 
@@ -259,8 +230,6 @@ class ChatProvider extends ChangeNotifier {
     _uploadEta = eta;
 
     final now = DateTime.now();
-    // Throttle progress updates to avoid flooding notifyListeners (~100ms)
-    // Always notify immediately on finish, initial start or 100% completion
     if (!isUploading ||
         progress == 0.0 ||
         progress >= 1.0 ||
@@ -270,7 +239,12 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> sendLocation(double lat, double lng, String locationName, {Map<String, dynamic>? metadata}) async {
+  Future<void> sendLocation(
+    double lat,
+    double lng,
+    String locationName, {
+    Map<String, dynamic>? metadata,
+  }) async {
     if (_roomCode == null || _nickname == null) return;
     try {
       final replyId = _replyToMessage?.id;
@@ -297,18 +271,22 @@ class ChatProvider extends ChangeNotifier {
 
   Future<void> exportChatHistoryAsText() async {
     if (_roomCode == null) return;
+    final strings = AppStrings(await PreferencesService.getLanguage());
     try {
       _setLoading(true);
-      final textData = await _repository.fetchAllMessagesAsText(_roomCode!, aesKeyBase64: _currentAesKeyBase64);
+      final textData = await _repository.fetchAllMessagesAsText(
+        _roomCode!,
+        aesKeyBase64: _currentAesKeyBase64,
+      );
       final tempDir = await getTemporaryDirectory();
       final file = File('${tempDir.path}/mozechat_history_$_roomCode.txt');
       await file.writeAsString(textData);
       _setLoading(false);
       // ignore: deprecated_member_use
-      await Share.shareXFiles([XFile(file.path)], text: 'MozeChat History Export');
+      await Share.shareXFiles([XFile(file.path)], text: strings.exportHistorySubject);
     } catch (e) {
       _setLoading(false);
-      _setError('Export failed: $e');
+      _setError('${strings.exportFailedPrefix}: $e');
     }
   }
 
@@ -337,7 +315,6 @@ class ChatProvider extends ChangeNotifier {
   Future<bool> joinRoom(String code) async {
     try {
       String resolvedCode = code.trim();
-      // If code is a 64-character SHA-256 derived hash, resolve actual roomCode from history
       if (resolvedCode.length == 64 && RegExp(r'^[0-9a-fA-F]+$').hasMatch(resolvedCode)) {
         final history = await PreferencesService.getRoomHistory();
         for (final hCode in history) {
@@ -355,10 +332,10 @@ class ChatProvider extends ChangeNotifier {
       _setLoading(true);
       final connectivity = await Connectivity().checkConnectivity();
       final isOffline = connectivity.contains(ConnectivityResult.none);
-      
+
       if (!isOffline) {
         await _repository.joinOrCreateRoom(resolvedCode);
-        
+
         final doc = await _repository.getRoomMetadata(resolvedCode);
         if (doc.exists) {
           final data = doc.data() as Map<String, dynamic>? ?? {};
@@ -366,14 +343,14 @@ class ChatProvider extends ChangeNotifier {
           _notes = notesData.cast<String>();
         }
       }
-      _roomJoinTime = DateTime.now();
 
-      // Geçmişe ekle
       await PreferencesService.addRoomToHistory(resolvedCode);
       await PreferencesService.saveLastActiveRoom(resolvedCode);
 
-      NotificationService.currentActiveRoomCode = resolvedCode;
       NotificationService.clearNotificationsForRoom(resolvedCode);
+      if (_isUserInChatScreen) {
+        NotificationService.setActiveChatRoom(resolvedCode, inChat: true);
+      }
 
       _listenToRoom();
       _listenToMessages();
@@ -389,11 +366,9 @@ class ChatProvider extends ChangeNotifier {
   Future<bool> joinExplicitRoom(String pseudoRoomCode) async {
     try {
       _setLoading(true);
-      
-      _roomCode = pseudoRoomCode; // This acts as the secure room code
-      _roomJoinTime = DateTime.now();
 
-      // Fetch Room to get encryptedKeys
+      _roomCode = pseudoRoomCode;
+
       try {
         final roomDoc = await _repository.getRoomMetadata(pseudoRoomCode);
         if (roomDoc.exists) {
@@ -411,8 +386,10 @@ class ChatProvider extends ChangeNotifier {
         debugPrint('Error getting room E2EE key: $e');
       }
 
-      NotificationService.currentActiveRoomCode = pseudoRoomCode;
       NotificationService.clearNotificationsForRoom(pseudoRoomCode);
+      if (_isUserInChatScreen) {
+        NotificationService.setActiveChatRoom(pseudoRoomCode, inChat: true);
+      }
 
       _listenToRoom();
       _listenToMessages();
@@ -425,8 +402,8 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-
-  Future<void> sendMessage(String text, {
+  Future<void> sendMessage(
+    String text, {
     String? senderIdOverride,
     String? nicknameOverride,
     Map<String, dynamic>? metadata,
@@ -475,11 +452,11 @@ class ChatProvider extends ChangeNotifier {
     if (msg.localId == null) return;
     final connectivity = await Connectivity().checkConnectivity();
     if (connectivity.contains(ConnectivityResult.none)) {
-      _setError("Internet is still disconnected.");
+      final strings = AppStrings(await PreferencesService.getLanguage());
+      _setError(strings.internetDisconnectedError);
       return;
     }
 
-    // Yükleniyor durumuna al
     updateLocalMessageStatus(msg.localId!, 'pending');
 
     if (msg.type == 'text') {
@@ -498,38 +475,27 @@ class ChatProvider extends ChangeNotifier {
         updateLocalMessageStatus(msg.localId!, 'failed');
       }
     } else {
-      // Medya (Resim/Video/Ses) retry için path yoksa geç
       updateLocalMessageStatus(msg.localId!, 'failed');
-    }
-  }
-
-  Future<void> sendBotMessage(
-    String text, {
-    String botName = "Moze bot",
-  }) async {
-    if (_roomCode == null) return;
-    try {
-      await _repository.sendMessage(
-        _roomCode!,
-        text,
-        botName,
-        senderIdOverride: 'system_bot',
-        aesKeyBase64: _currentAesKeyBase64,
-      );
-    } catch (e) {
-      _setError(e.toString());
     }
   }
 
   Future<void> deleteMessage(String messageId) async {
     if (_roomCode != null) {
-      await _repository.deleteMessage(_roomCode!, messageId, aesKeyBase64: _currentAesKeyBase64);
+      await _repository.deleteMessage(
+        _roomCode!,
+        messageId,
+        aesKeyBase64: _currentAesKeyBase64,
+      );
     }
   }
 
   Future<void> deleteMessages(List<String> messageIds) async {
     if (_roomCode != null && messageIds.isNotEmpty) {
-      await _repository.deleteMessages(_roomCode!, messageIds, aesKeyBase64: _currentAesKeyBase64);
+      await _repository.deleteMessages(
+        _roomCode!,
+        messageIds,
+        aesKeyBase64: _currentAesKeyBase64,
+      );
     }
   }
 
@@ -551,7 +517,11 @@ class ChatProvider extends ChangeNotifier {
     }
   }
 
-  Future<void> editMessage(String messageId, String newText, {bool isGameMove = false}) async {
+  Future<void> editMessage(
+    String messageId,
+    String newText, {
+    bool isGameMove = false,
+  }) async {
     if (_roomCode != null) {
       await _repository.editMessage(
         _roomCode!,
@@ -568,9 +538,10 @@ class ChatProvider extends ChangeNotifier {
     if (_roomCode != null) {
       _roomSubscription = _repository.listenToRoom(_roomCode!).listen((
         snapshot,
-      ) {
+      ) async {
         if (!snapshot.exists) {
-          _setError("This node has been destroyed.");
+          final strings = AppStrings(await PreferencesService.getLanguage());
+          _setError(strings.nodeDestroyedError);
           leaveRoom();
           return;
         }
@@ -581,7 +552,8 @@ class ChatProvider extends ChangeNotifier {
           final currentUid = _repository.currentUserId;
 
           if (!members.contains(currentUid)) {
-            _setError("You have been kicked from this node.");
+            final strings = AppStrings(await PreferencesService.getLanguage());
+            _setError(strings.kickedFromNodeError);
             leaveRoom();
             return;
           }
@@ -592,7 +564,6 @@ class ChatProvider extends ChangeNotifier {
           final typing = data['typing'] as Map<String, dynamic>? ?? {};
           final lastSeenMap = data['lastSeen'] as Map<String, dynamic>? ?? {};
 
-          // Merge notes from room metadata (eliminates duplicate listener)
           final notesData = data['notes'] as List<dynamic>? ?? [];
           _notes = notesData.cast<String>();
 
@@ -608,7 +579,6 @@ class ChatProvider extends ChangeNotifier {
                 final ls = lastSeenMap[key];
                 if (ls is Timestamp) {
                   final seenDate = ls.toDate();
-                  // Pick the most recent lastSeen among offline users
                   if (_otherLastSeen == null || seenDate.isAfter(_otherLastSeen!)) {
                     _otherLastSeen = seenDate;
                   }
@@ -638,14 +608,20 @@ class ChatProvider extends ChangeNotifier {
     _messagesSubscription?.cancel();
     if (_roomCode != null) {
       _messagesSubscription = _repository
-          .listenToMessages(_roomCode!, limit: _messageLimit, aesKeyBase64: _currentAesKeyBase64)
+          .listenToMessages(
+            _roomCode!,
+            limit: _messageLimit,
+            aesKeyBase64: _currentAesKeyBase64,
+          )
           .listen(
             (msgs) {
               bool isInitialLoad = _firestoreMessages.isEmpty;
               _firestoreMessages = msgs;
 
-              // Local mesajları temizle (Eğer firestore'a ulaşmışlarsa)
-              final incomingLocalIds = msgs.map((m) => m.localId).whereType<String>().toSet();
+              final incomingLocalIds = msgs
+                  .map((m) => m.localId)
+                  .whereType<String>()
+                  .toSet();
               if (incomingLocalIds.isNotEmpty) {
                 _localMessages.removeWhere(
                   (localMsg) => incomingLocalIds.contains(localMsg.localId),
@@ -659,15 +635,12 @@ class ChatProvider extends ChangeNotifier {
                 if (latestMsg.senderId != currentUid &&
                     latestMsg.id != _lastMessageId) {
                   _lastMessageId = latestMsg.id;
-                  
+
                   if (!isInitialLoad) {
                     _playSound('sounds/gtanotification.mp3');
                   }
                 }
 
-                // Status update logic:
-                // 1. If user is IN the chat screen -> mark as 'read'
-                // 2. If user is in the app but NOT in chat screen -> mark as 'delivered'
                 List<String> toRead = [];
                 List<String> toDeliver = [];
                 for (var msg in msgs) {
@@ -692,47 +665,13 @@ class ChatProvider extends ChangeNotifier {
                     'delivered',
                   );
                 }
-                // Removed Ghost Mode
-                // Bot command processing
-                for (var msg in msgs) {
-                  if (_processedCommandIds.contains(msg.id)) break; // Stop checking older messages
-                  
-                  // Ignore commands from before the user joined the room
-                  if (_roomJoinTime != null && msg.timestamp.isBefore(_roomJoinTime!)) {
-                    _processedCommandIds.add(msg.id);
-                    continue;
-                  }
-
-                  _processedCommandIds.add(msg.id);
-                  if (msg.text.startsWith('!') && msg.senderId != 'system_bot') {
-                    if (currentUid == msg.senderId) {
-                      _botService?.komutCalistir(msg.text, msg.senderId, msg.nickname);
-                    } else {
-                      // Karşı taraftan gelen broadcast komutlar (!hatırlat vb.) lokal olarak çalıştırılır
-                      final args = msg.text.trim().split(' ');
-                      if (args[0].toLowerCase() == '!hatırlat' && args.length >= 3) {
-                        int? secs = int.tryParse(args.last);
-                        if (secs != null) {
-                          final reminderMsg = args.sublist(1, args.length - 1).join(" ");
-                          Future.delayed(Duration(seconds: secs), () {
-                            NotificationService.showMessageNotification(
-                              title: "Moze bot alarm",
-                              body: reminderMsg,
-                              payload: _roomCode ?? 'unknown',
-                            );
-                          });
-                        }
-                      }
-                    }
-                  }
-                }
               }
 
               _invalidateMessagesCache();
               notifyListeners();
             },
             onError: (e) {
-              _setError("Mesajlar alınamadı: $e");
+              _setError('$e');
             },
           );
     }
@@ -752,7 +691,8 @@ class ChatProvider extends ChangeNotifier {
 
   void setUserInChat(bool value) {
     _isUserInChatScreen = value;
-    // When user enters chat screen, immediately mark delivered messages as read
+    NotificationService.setActiveChatRoom(_roomCode, inChat: value);
+
     if (value && _roomCode != null) {
       final currentUid = _repository.currentUserId;
       final toRead = <String>[];
@@ -772,22 +712,18 @@ class ChatProvider extends ChangeNotifier {
     _isUserInChatScreen = false;
     updatePresence(false);
     updateTyping(false);
-    NotificationService.currentActiveRoomCode = null;
+    NotificationService.setActiveChatRoom(null, inChat: false);
     _messagesSubscription?.cancel();
     _roomSubscription?.cancel();
-    // Oda geçmişten SİLİNMEZ, sadece abonelik biter.
     _roomCode = null;
     _firestoreMessages = [];
     _localMessages = [];
     _invalidateMessagesCache();
     _lastMessageId = null;
-    _roomJoinTime = null;
-    _processedCommandIds.clear();
     PreferencesService.saveLastActiveRoom(null);
     notifyListeners();
   }
 
-  // Local message handling
   void addLocalMessage(Message msg) {
     _localMessages.add(msg);
     _invalidateMessagesCache();

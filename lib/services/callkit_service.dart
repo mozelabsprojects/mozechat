@@ -1,19 +1,26 @@
+import 'dart:async';
+import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_callkit_incoming/flutter_callkit_incoming.dart';
 import 'package:flutter_callkit_incoming/entities/call_event.dart';
 import 'package:flutter_callkit_incoming/entities/call_kit_params.dart';
 import 'package:flutter_callkit_incoming/entities/notification_params.dart';
 import 'package:flutter_callkit_incoming/entities/ios_params.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
-import 'package:flutter/foundation.dart';
-import 'dart:convert';
+import 'preferences_service.dart';
+import '../utils/app_strings.dart';
 
 class CallkitService {
   static final CallkitService _instance = CallkitService._internal();
   factory CallkitService() => _instance;
   CallkitService._internal();
 
+  StreamSubscription<CallEvent?>? _eventSubscription;
+  String? _lastKnownRoomId;
+
   Function(String callId, Map<String, dynamic> offer, String roomId)? onCallAccepted;
   Function(String callId, String roomId)? onCallDeclined;
+  Function(String callId)? onCallEndedBySystem;
 
   Future<void> showCallkitIncoming({
     required String callerName,
@@ -21,79 +28,127 @@ class CallkitService {
     required String callId,
     required Map<String, dynamic> offer,
   }) async {
+    _lastKnownRoomId = roomId;
+    final lang = await PreferencesService.getLanguage();
+    final strings = AppStrings(lang);
+
     final params = CallKitParams(
       id: callId,
       nameCaller: callerName,
       appName: 'Mozechat',
       avatar: '',
-      handle: 'Incoming Call',
-      type: 0,
+      handle: strings.voiceCallTitle,
+      type: 0, // Audio call
       missedCallNotification: const NotificationParams(
-        showNotification: true,
-        isShowCallback: true,
-        subtitle: 'Missed call',
-        callbackText: 'Call back',
+        showNotification: false,
+        isShowCallback: false,
       ),
-      duration: 30000,
+      duration: 40000,
       extra: <String, dynamic>{
         'roomId': roomId,
         'offer': offer,
       },
       headers: <String, dynamic>{'apiKey': '1234'},
-      android: const AndroidParams(
+      android: AndroidParams(
         isCustomNotification: true,
         isShowLogo: false,
         ringtonePath: 'system_ringtone_default',
-        backgroundColor: '#0955fa',
+        backgroundColor: '#0A0E12',
         backgroundUrl: 'assets/mozechat.png',
-        actionColor: '#4CAF50',
+        actionColor: '#159D87',
         textColor: '#ffffff',
-        incomingCallNotificationChannelName: "Incoming Call",
-        missedCallNotificationChannelName: "Missed Call",
+        incomingCallNotificationChannelName: strings.incomingVoiceCall,
+        missedCallNotificationChannelName: strings.missedCallTitle,
         isShowCallID: false,
       ),
       ios: const IOSParams(
         iconName: 'CallKitLogo',
         handleType: 'generic',
-        supportsVideo: true,
-        maximumCallGroups: 2,
+        supportsVideo: false,
+        maximumCallGroups: 1,
         maximumCallsPerCallGroup: 1,
-        audioSessionMode: 'default',
+        audioSessionMode: 'voiceChat',
         audioSessionActive: true,
-        audioSessionPreferredSampleRate: 44100.0,
-        audioSessionPreferredIOBufferDuration: 0.005,
-        supportsDTMF: true,
-        supportsHolding: true,
+        audioSessionPreferredSampleRate: 48000.0,
+        audioSessionPreferredIOBufferDuration: 0.02,
+        supportsDTMF: false,
+        supportsHolding: false,
         supportsGrouping: false,
         supportsUngrouping: false,
         ringtonePath: 'system_ringtone_default',
       ),
     );
-    
-    await FlutterCallkitIncoming.showCallkitIncoming(params);
+
+    try {
+      await FlutterCallkitIncoming.showCallkitIncoming(params);
+    } catch (e) {
+      debugPrint('showCallkitIncoming error: $e');
+    }
+  }
+
+  Future<void> setCallConnected(String callId) async {
+    try {
+      await FlutterCallkitIncoming.setCallConnected(callId);
+    } catch (e) {
+      debugPrint('setCallConnected warning: $e');
+    }
+  }
+
+  Future<void> endAllCalls() async {
+    try {
+      await FlutterCallkitIncoming.endAllCalls();
+    } catch (e) {
+      debugPrint('endAllCalls warning: $e');
+    }
   }
 
   void listenToCallEvents() {
-    FlutterCallkitIncoming.onEvent.listen((CallEvent? event) async {
+    _eventSubscription?.cancel();
+    _eventSubscription = FlutterCallkitIncoming.onEvent.listen((CallEvent? event) async {
       if (event == null) return;
-      
+
       if (event is CallEventActionCallAccept) {
         final extra = event.callKitParams.extra;
+        final callId = event.callKitParams.id;
+        await setCallConnected(callId);
+
         if (onCallAccepted != null && extra != null) {
           var offer = extra['offer'];
           if (offer is String) {
             try {
               offer = jsonDecode(offer);
             } catch (e) {
-              debugPrint("Error decoding offer: $e");
+              debugPrint('Error decoding offer: $e');
             }
           }
-          onCallAccepted!(event.callKitParams.id, offer, extra['roomId']);
+          final roomId = (extra['roomId'] as String?) ?? _lastKnownRoomId ?? '';
+          if (offer is Map && roomId.isNotEmpty) {
+            onCallAccepted!(
+              callId,
+              Map<String, dynamic>.from(offer),
+              roomId,
+            );
+          }
         }
       } else if (event is CallEventActionCallDecline) {
         final extra = event.callKitParams.extra;
-        if (onCallDeclined != null && extra != null) {
-          onCallDeclined!(event.callKitParams.id, extra['roomId']);
+        final roomId = (extra?['roomId'] as String?) ?? _lastKnownRoomId ?? '';
+        final callId = event.callKitParams.id;
+        await endAllCalls();
+        if (onCallDeclined != null && roomId.isNotEmpty) {
+          onCallDeclined!(callId, roomId);
+        }
+      } else if (event is CallEventActionCallEnded) {
+        final callId = event.callKitParams.id;
+        if (onCallEndedBySystem != null) {
+          onCallEndedBySystem!(callId);
+        }
+      } else if (event is CallEventActionCallTimeout) {
+        final callId = event.id;
+        final roomId = _lastKnownRoomId ?? '';
+        await endAllCalls();
+        if (onCallDeclined != null && roomId.isNotEmpty) {
+          onCallDeclined!(callId, roomId);
         }
       }
     });

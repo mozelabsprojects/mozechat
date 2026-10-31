@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
 import '../providers/chat_provider.dart';
+import '../providers/locale_provider.dart';
 
 class StarredMessagesScreen extends StatelessWidget {
   const StarredMessagesScreen({super.key});
@@ -9,9 +10,9 @@ class StarredMessagesScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
+    final strings = context.watch<LocaleProvider>().strings;
     final uid = chatProvider.currentUserId;
-    
-    // Filter messages that have been starred by the current user
+
     final starredMessages = chatProvider.messages.where((msg) {
       if (uid == null || msg.starredBy == null) return false;
       return msg.starredBy![uid] == true;
@@ -19,14 +20,14 @@ class StarredMessagesScreen extends StatelessWidget {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Starred Messages'),
+        title: Text(strings.starredMessagesTitle),
         backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       ),
       body: starredMessages.isEmpty
-          ? const Center(
+          ? Center(
               child: Text(
-                'No starred messages yet.',
-                style: TextStyle(color: Colors.white54, fontSize: 16),
+                strings.noStarredMessages,
+                style: const TextStyle(color: Colors.white54, fontSize: 16),
               ),
             )
           : ListView.builder(
@@ -50,7 +51,7 @@ class StarredMessagesScreen extends StatelessWidget {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            msg.text.isNotEmpty ? msg.text : '[Media/Attachment]',
+                            msg.text.isNotEmpty ? msg.text : strings.mediaAttachmentFallback,
                             style: const TextStyle(color: Colors.white),
                           ),
                           const SizedBox(height: 4),

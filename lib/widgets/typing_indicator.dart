@@ -1,13 +1,15 @@
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
+import '../providers/locale_provider.dart';
 
 class TypingIndicator extends StatefulWidget {
   final Color textColor;
-  final String text;
+  final String? text;
 
   const TypingIndicator({
     super.key, 
     required this.textColor,
-    this.text = "yazıyor...",
+    this.text,
   });
 
   @override
@@ -61,6 +63,8 @@ class _TypingIndicatorState extends State<TypingIndicator>
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
+    final displayText = widget.text ?? strings.typing;
     return Container(
       margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
       padding: const EdgeInsets.symmetric(horizontal: 14.0, vertical: 10.0),
@@ -96,7 +100,7 @@ class _TypingIndicatorState extends State<TypingIndicator>
           ),
           const SizedBox(width: 8),
           Text(
-            widget.text,
+            displayText,
             style: TextStyle(
               color: widget.textColor.withValues(alpha: 0.8),
               fontSize: 12,

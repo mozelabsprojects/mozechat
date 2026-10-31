@@ -28,7 +28,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _isLoading = false;
   bool _isCheckingUpdate = false;
   bool _isClearingCache = false;
-  String _cacheSize = 'Hesaplanıyor...';
+  String? _cacheSize;
   bool _outgoingSound = true;
   bool _incomingSound = true;
 
@@ -37,6 +37,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
     super.initState();
     _loadUserProfile();
     _refreshCacheSize();
+  }
+
+  @override
+  void dispose() {
+    _nameController.dispose();
+    super.dispose();
   }
 
   Future<void> _refreshCacheSize() async {
@@ -53,9 +59,10 @@ class _SettingsScreenState extends State<SettingsScreen> {
     if (mounted) {
       setState(() => _isClearingCache = false);
       final accent = context.read<ThemeProvider>().accentColor;
+      final strings = context.read<LocaleProvider>().strings;
       CyberHUD.show(
         context,
-        message: '[OK] MEDYA ÖNBELLEĞİ TEMİZLENDİ',
+        message: strings.cacheClearedToast,
         icon: Icons.cleaning_services_outlined,
         accentColor: accent,
       );
@@ -93,9 +100,11 @@ class _SettingsScreenState extends State<SettingsScreen> {
         });
       }
     } catch (e) {
-      debugPrint("Error loading profile: $e");
+      debugPrint('Error loading profile: $e');
     }
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   Future<void> _updateProfile() async {
@@ -118,21 +127,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
       if (!mounted) return;
       final accent = context.read<ThemeProvider>().accentColor;
+      final strings = context.read<LocaleProvider>().strings;
       CyberHUD.show(
         context,
-        message: '[OK] ALIAS GÜNCELLENDİ',
+        message: strings.aliasUpdatedToast,
         icon: Icons.check_circle_outline,
         accentColor: accent,
       );
     } catch (e) {
       if (!mounted) return;
+      final strings = context.read<LocaleProvider>().strings;
       CyberHUD.show(
         context,
-        message: '[HATA] $e',
+        message: '${strings.errorPrefix} $e',
         isError: true,
       );
     }
-    setState(() => _isLoading = false);
+    if (mounted) {
+      setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -190,7 +203,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Icon(Icons.chevron_right, color: accentColor, size: 16),
                             const SizedBox(width: 6),
                             Text(
-                              'AGENT ALIAS',
+                              strings.agentAliasSection,
                               style: TextStyle(
                                 color: accentColor.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.bold,
@@ -208,14 +221,14 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             child: TextField(
                               controller: _nameController,
                               style: TextStyle(
-                                fontSize: 16, 
+                                fontSize: 16,
                                 color: accentColor,
                                 fontFamily: 'Courier',
                                 fontWeight: FontWeight.bold,
                               ),
                               decoration: InputDecoration(
                                 prefixIcon: Icon(Icons.terminal, color: accentColor.withValues(alpha: 0.4)),
-                                hintText: 'Enter alias...',
+                                hintText: strings.enterAliasHint,
                                 hintStyle: TextStyle(color: accentColor.withValues(alpha: 0.2)),
                                 filled: true,
                                 fillColor: Colors.black.withValues(alpha: 0.5),
@@ -259,7 +272,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Icon(Icons.security, color: accentColor, size: 16),
                             const SizedBox(width: 6),
                             Text(
-                              'PRIVACY & STEALTH CONFIG',
+                              strings.privacyStealthSection,
                               style: TextStyle(
                                 color: accentColor.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.bold,
@@ -286,7 +299,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 builder: (context, chatProvider, _) {
                                   return Column(
                                     children: [
-                                      // Robotic Anonymous Voice
                                       SwitchListTile(
                                         title: Text(
                                           strings.anonymousVoiceTitle,
@@ -312,7 +324,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         },
                                       ),
                                       Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
-                                      // Tap to reveal
                                       SwitchListTile(
                                         title: Text(
                                           strings.tapToRevealTitle,
@@ -344,7 +355,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         },
                                       ),
                                       Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
-                                      // Panic camouflage
                                       SwitchListTile(
                                         title: Text(
                                           strings.panicTitle,
@@ -407,8 +417,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             children: [
                               Expanded(
                                 child: Text(
-                                  localeProvider.isTurkish ? 'Mevcut Dil: Türkçe 🇹🇷' : 'Current Language: English 🇺🇸',
-                                  style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold),
+                                  strings.currentLanguageLabel,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.bold,
+                                  ),
                                 ),
                               ),
                               Container(
@@ -425,7 +439,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: localeProvider.isTurkish ? accentColor.withValues(alpha: 0.25) : Colors.transparent,
+                                          color: localeProvider.isTurkish
+                                              ? accentColor.withValues(alpha: 0.25)
+                                              : Colors.transparent,
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
@@ -443,7 +459,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                                         decoration: BoxDecoration(
-                                          color: !localeProvider.isTurkish ? accentColor.withValues(alpha: 0.25) : Colors.transparent,
+                                          color: !localeProvider.isTurkish
+                                              ? accentColor.withValues(alpha: 0.25)
+                                              : Colors.transparent,
                                           borderRadius: BorderRadius.circular(6),
                                         ),
                                         child: Text(
@@ -471,7 +489,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Icon(Icons.battery_charging_full, color: accentColor, size: 16),
                             const SizedBox(width: 6),
                             Text(
-                              'PERFORMANCE & BATTERY',
+                              strings.performanceBatterySection,
                               style: TextStyle(
                                 color: accentColor.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.bold,
@@ -496,7 +514,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                               child: SwitchListTile(
                                 title: Text(
-                                  'ECO MODE',
+                                  strings.ecoModeTitle,
                                   style: TextStyle(
                                     color: accentColor,
                                     fontWeight: FontWeight.bold,
@@ -505,7 +523,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                 ),
                                 subtitle: Text(
-                                  'Disables animations and physics engine to save battery.',
+                                  strings.ecoModeSubtitle,
                                   style: TextStyle(
                                     color: accentColor.withValues(alpha: 0.5),
                                     fontSize: 10,
@@ -530,7 +548,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Icon(Icons.volume_up_outlined, color: accentColor, size: 16),
                             const SizedBox(width: 6),
                             Text(
-                              'AUDIO & SOUND FX',
+                              strings.audioSoundSection,
                               style: TextStyle(
                                 color: accentColor.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.bold,
@@ -557,7 +575,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                 children: [
                                   SwitchListTile(
                                     title: Text(
-                                      'GİDEN MESAJ SESİ',
+                                      strings.outgoingSoundTitle,
                                       style: TextStyle(
                                         color: accentColor,
                                         fontWeight: FontWeight.bold,
@@ -566,7 +584,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                     ),
                                     subtitle: Text(
-                                      'Mesaj gönderildiğinde bildirim sesi çalar.',
+                                      strings.outgoingSoundSubtitle,
                                       style: TextStyle(
                                         color: Colors.white.withValues(alpha: 0.5),
                                         fontSize: 10,
@@ -584,7 +602,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
                                   SwitchListTile(
                                     title: Text(
-                                      'GELEN MESAJ SESİ',
+                                      strings.incomingSoundTitle,
                                       style: TextStyle(
                                         color: accentColor,
                                         fontWeight: FontWeight.bold,
@@ -593,7 +611,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                       ),
                                     ),
                                     subtitle: Text(
-                                      'Yeni mesaj alındığında bildirim sesi çalar.',
+                                      strings.incomingSoundSubtitle,
                                       style: TextStyle(
                                         color: Colors.white.withValues(alpha: 0.5),
                                         fontSize: 10,
@@ -622,7 +640,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                             Icon(Icons.chevron_right, color: accentColor, size: 16),
                             const SizedBox(width: 6),
                             Text(
-                              'INTERFACE THEME',
+                              strings.interfaceThemeSection,
                               style: TextStyle(
                                 color: accentColor.withValues(alpha: 0.5),
                                 fontWeight: FontWeight.bold,
@@ -654,13 +672,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         : accentColor.withValues(alpha: 0.2),
                                     width: isActive ? 1.5 : 1.0,
                                   ),
-                                  boxShadow: isActive ? [
-                                    BoxShadow(
-                                      color: accentColor.withValues(alpha: 0.2),
-                                      blurRadius: 10,
-                                      spreadRadius: 1,
-                                    )
-                                  ] : [],
+                                  boxShadow: isActive
+                                      ? [
+                                          BoxShadow(
+                                            color: accentColor.withValues(alpha: 0.2),
+                                            blurRadius: 10,
+                                            spreadRadius: 1,
+                                          ),
+                                        ]
+                                      : [],
                                 ),
                                 child: Text(
                                   mode.name.toUpperCase(),
@@ -682,7 +702,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                         // System Update Section
                         Text(
-                          'SYSTEM OTA UPDATES',
+                          strings.systemOtaSection,
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -710,7 +730,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'GitHub In-App OTA',
+                                      strings.githubOtaTitle,
                                       style: TextStyle(
                                         color: accentColor,
                                         fontWeight: FontWeight.bold,
@@ -719,7 +739,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Otomatik APK & Sürüm Denetimi',
+                                      strings.githubOtaSubtitle,
                                       style: TextStyle(
                                         color: Colors.white.withValues(alpha: 0.5),
                                         fontSize: 11,
@@ -745,9 +765,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                       ),
                                       onPressed: _checkUpdate,
-                                      child: const Text(
-                                        'DENETLE',
-                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                      child: Text(
+                                        strings.checkBtn,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
                                       ),
                                     ),
                             ],
@@ -758,7 +778,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
                         // Media Cache & Storage Section
                         Text(
-                          'DATA & STORAGE',
+                          strings.dataStorageSection,
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.bold,
@@ -786,7 +806,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
                                     Text(
-                                      'Medya & Geçici Önbellek',
+                                      strings.mediaCacheTitle,
                                       style: TextStyle(
                                         color: accentColor,
                                         fontWeight: FontWeight.bold,
@@ -795,7 +815,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     ),
                                     const SizedBox(height: 2),
                                     Text(
-                                      'Ses, resim ve video kalıntıları: $_cacheSize',
+                                      strings.mediaCacheSubtitle(_cacheSize ?? strings.calculatingCache),
                                       style: TextStyle(
                                         color: Colors.white.withValues(alpha: 0.5),
                                         fontSize: 11,
@@ -821,9 +841,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
                                       ),
                                       onPressed: _clearCache,
-                                      child: const Text(
-                                        'TEMİZLE',
-                                        style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
+                                      child: Text(
+                                        strings.clearBtn,
+                                        style: const TextStyle(fontSize: 11, fontWeight: FontWeight.bold, letterSpacing: 1),
                                       ),
                                     ),
                             ],
@@ -855,7 +875,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                   ),
                                   child: Center(
                                     child: Text(
-                                      '[ SAVE CONFIGURATION ]',
+                                      strings.saveConfigBtn,
                                       style: TextStyle(
                                         fontSize: 14,
                                         fontWeight: FontWeight.bold,
@@ -877,7 +897,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                           child: Column(
                             children: [
                               Text(
-                                'MOZECHAT v0.1.0',
+                                'MOZECHAT v0.1.2',
                                 style: TextStyle(
                                   fontFamily: 'Courier',
                                   fontSize: 12,
@@ -888,7 +908,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                               ),
                               const SizedBox(height: 6),
                               Text(
-                                'Developed with precision by mozelabs.com',
+                                strings.developedBy,
                                 style: TextStyle(
                                   fontSize: 11,
                                   color: Colors.white.withValues(alpha: 0.45),

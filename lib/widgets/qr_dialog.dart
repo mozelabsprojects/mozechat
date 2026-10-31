@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import 'package:share_plus/share_plus.dart';
+import '../providers/locale_provider.dart';
 import 'cyber_hud.dart';
 
 class QRDialog extends StatelessWidget {
@@ -25,6 +27,7 @@ class QRDialog extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     const accentColor = Color(0xFF159D87);
 
     return Container(
@@ -45,7 +48,6 @@ class QRDialog extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // Handle bar
             Container(
               width: 40,
               height: 4,
@@ -55,27 +57,28 @@ class QRDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Title
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const Icon(Icons.qr_code_2_rounded, color: accentColor, size: 26),
                 const SizedBox(width: 10),
-                Text(
-                  roomTitle ?? 'GÜVENLİ ODA QR KODU',
-                  style: const TextStyle(
-                    color: accentColor,
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 2,
+                Flexible(
+                  child: Text(
+                    roomTitle ?? strings.qrDialogDefaultTitle,
+                    style: const TextStyle(
+                      color: accentColor,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 2,
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
               ],
             ),
             const SizedBox(height: 8),
             Text(
-              'Arkadaşınız bu kodu kamerasıyla taratarak anında odaya katılabilir.',
+              strings.qrDialogSubtitle,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.6),
@@ -83,8 +86,6 @@ class QRDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // QR Code Container
             Container(
               padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
@@ -114,8 +115,6 @@ class QRDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 20),
-
-            // Room code chip
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
               decoration: BoxDecoration(
@@ -135,8 +134,6 @@ class QRDialog extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-
-            // Action buttons
             Row(
               children: [
                 Expanded(
@@ -148,12 +145,12 @@ class QRDialog extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     icon: const Icon(Icons.copy_rounded, size: 18),
-                    label: const Text('KOPYALA', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    label: Text(strings.copyBtn, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: roomCode));
                       CyberHUD.show(
                         context,
-                        message: 'ODA KODU PANOYA KOPYALANDI',
+                        message: strings.roomCodeCopied,
                         icon: Icons.copy_rounded,
                         accentColor: accentColor,
                       );
@@ -170,13 +167,13 @@ class QRDialog extends StatelessWidget {
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                     ),
                     icon: const Icon(Icons.share_rounded, size: 18),
-                    label: const Text('PAYLAŞ', style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
+                    label: Text(strings.shareBtn, style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1)),
                     onPressed: () {
                       HapticFeedback.selectionClick();
                       // ignore: deprecated_member_use
                       Share.share(
-                        'Mozechat üzerinden uçtan uca şifreli odama katıl: $roomCode',
-                        subject: 'Mozechat Güvenli Oda Daveti',
+                        strings.shareRoomInviteText(roomCode),
+                        subject: strings.shareRoomInviteSubject,
                       );
                     },
                   ),
@@ -189,4 +186,3 @@ class QRDialog extends StatelessWidget {
     );
   }
 }
-

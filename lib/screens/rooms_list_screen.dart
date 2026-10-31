@@ -50,10 +50,8 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
     _isNavigating = true;
 
     final chatProvider = context.read<ChatProvider>();
-    // Start joining asynchronously in background (zero freeze)
     unawaited(chatProvider.joinRoom(targetCode));
 
-    // Instant, fluid slide-fade transition
     await Navigator.push(
       context,
       PageRouteBuilder(
@@ -104,7 +102,6 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
     final pinned = await PreferencesService.getPinnedRooms();
     final history = await PreferencesService.getRoomHistory();
 
-    // Map known real codes to their derived hashes
     for (final code in history) {
       final rId = CryptoService.deriveRoomId(code);
       _roomIdToRealCode[rId] = code;
@@ -292,6 +289,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   }
 
   void _showQROptions(Color accentColor) {
+    final strings = context.read<LocaleProvider>().strings;
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.black.withValues(alpha: 0.95),
@@ -324,12 +322,12 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                   child: Icon(Icons.qr_code_scanner_rounded, color: accentColor),
                 ),
                 title: Text(
-                  'QR KOD TARA',
+                  strings.scanQrCodeTitle,
                   style: TextStyle(color: accentColor, fontWeight: FontWeight.bold, letterSpacing: 1),
                 ),
-                subtitle: const Text(
-                  'Kamerayı açarak arkadaşınızın QR kodunu okutun',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                subtitle: Text(
+                  strings.scanQrCodeSubtitle,
+                  style: const TextStyle(color: Colors.white60, fontSize: 12),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -347,12 +345,12 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                   child: Icon(Icons.qr_code_2_rounded, color: accentColor),
                 ),
                 title: Text(
-                  'YENİ ODA QR\'I OLUŞTUR',
+                  strings.createNewRoomQrTitle,
                   style: TextStyle(color: accentColor, fontWeight: FontWeight.bold, letterSpacing: 1),
                 ),
-                subtitle: const Text(
-                  'Arkadaşınızın taraması için yeni bir oda kodu ve QR oluşturun',
-                  style: TextStyle(color: Colors.white60, fontSize: 12),
+                subtitle: Text(
+                  strings.createNewRoomQrSubtitle,
+                  style: const TextStyle(color: Colors.white60, fontSize: 12),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
@@ -360,7 +358,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                   QRDialog.show(
                     context,
                     roomCode: newCode,
-                    roomTitle: 'YENİ GÜVENLİ ODA',
+                    roomTitle: strings.newSecureRoomTitle,
                   );
                 },
               ),
@@ -373,6 +371,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
 
   void _showRoomContextMenu(RoomModel room, String targetCode, Color accentColor) {
     HapticFeedback.mediumImpact();
+    final strings = context.read<LocaleProvider>().strings;
     final isPinned = _pinnedCodes.contains(targetCode);
     final currentAlias = _roomAliases[targetCode] ?? '';
 
@@ -398,14 +397,13 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              // Pin/Unpin
               ListTile(
                 leading: Icon(
                   isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
                   color: accentColor,
                 ),
                 title: Text(
-                  isPinned ? 'Sohbet Sabitlemesini Kaldır' : 'Sohbeti Başa Sabitle',
+                  isPinned ? strings.unpinChat : strings.pinChat,
                   style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 onTap: () async {
@@ -414,15 +412,16 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                   await _loadLocalSettings();
                 },
               ),
-              // Set Custom Alias
               ListTile(
                 leading: Icon(Icons.edit_note_rounded, color: accentColor),
-                title: const Text(
-                  'Özel İsim / Takma Ad Ver',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                title: Text(
+                  strings.setCustomAlias,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 subtitle: Text(
-                  currentAlias.isNotEmpty ? 'Mevcut: $currentAlias' : 'Yalnızca sizin cihazınızda görünür',
+                  currentAlias.isNotEmpty
+                      ? '${strings.currentAliasPrefix}: $currentAlias'
+                      : strings.aliasVisibleOnlyToYou,
                   style: const TextStyle(color: Colors.white54, fontSize: 11),
                 ),
                 onTap: () {
@@ -430,46 +429,43 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                   _showSetAliasDialog(targetCode, currentAlias, accentColor);
                 },
               ),
-              // Show QR
               ListTile(
                 leading: Icon(Icons.qr_code_2_rounded, color: accentColor),
-                title: const Text(
-                  'Oda QR Kodunu Göster',
-                  style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                title: Text(
+                  strings.showRoomQr,
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   QRDialog.show(
                     context,
                     roomCode: targetCode,
-                    roomTitle: currentAlias.isNotEmpty ? currentAlias : 'ODA QR KODU',
+                    roomTitle: currentAlias.isNotEmpty ? currentAlias : strings.roomQrCodeTitle,
                   );
                 },
               ),
-              // Copy Code
               ListTile(
                 leading: Icon(Icons.copy_rounded, color: accentColor),
-                title: const Text(
-                  'Oda Kodunu Kopyala',
-                  style: TextStyle(color: Colors.white),
+                title: Text(
+                  strings.copyRoomCode,
+                  style: const TextStyle(color: Colors.white),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   Clipboard.setData(ClipboardData(text: targetCode));
                   CyberHUD.show(
                     context,
-                    message: 'ODA KODU PANOYA KOPYALANDI',
+                    message: strings.roomCodeCopied,
                     icon: Icons.copy_rounded,
                     accentColor: accentColor,
                   );
                 },
               ),
               const Divider(color: Colors.white12),
-              // Delete Room
               ListTile(
                 leading: Icon(Icons.delete_outline, color: Colors.red.shade400),
                 title: Text(
-                  'Sohbeti Sil',
+                  strings.deleteChat,
                   style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.bold),
                 ),
                 onTap: () async {
@@ -486,6 +482,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   }
 
   void _showSetAliasDialog(String targetCode, String currentAlias, Color accentColor) {
+    final strings = context.read<LocaleProvider>().strings;
     final controller = TextEditingController(text: currentAlias);
     showDialog(
       context: context,
@@ -496,16 +493,16 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
           side: BorderSide(color: accentColor.withValues(alpha: 0.4)),
         ),
         title: Text(
-          'ÖZEL İSİM / ALIAS',
+          strings.customAliasDialogTitle,
           style: TextStyle(color: accentColor, fontWeight: FontWeight.bold, fontSize: 15, letterSpacing: 2),
         ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text(
-              'Bu isim yalnızca sizin telefonunuzda saklanır, uçtan uca şifrelemeyi etkilemez.',
-              style: TextStyle(color: Colors.white70, fontSize: 12),
+            Text(
+              strings.customAliasDialogSubtitle,
+              style: const TextStyle(color: Colors.white70, fontSize: 12),
             ),
             const SizedBox(height: 16),
             TextField(
@@ -513,7 +510,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
               style: const TextStyle(color: Colors.white),
               autofocus: true,
               decoration: InputDecoration(
-                hintText: 'Örn: Ahmet, Zeynep, Ofis Grubu...',
+                hintText: strings.customAliasHint,
                 hintStyle: TextStyle(color: Colors.white.withValues(alpha: 0.3)),
                 filled: true,
                 fillColor: Colors.white.withValues(alpha: 0.05),
@@ -529,7 +526,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('İPTAL', style: TextStyle(color: Colors.white54)),
+            child: Text(strings.cancel, style: const TextStyle(color: Colors.white54)),
           ),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
@@ -550,7 +547,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
               }
               if (ctx.mounted) Navigator.pop(ctx);
             },
-            child: const Text('KAYDET', style: TextStyle(fontWeight: FontWeight.bold)),
+            child: Text(strings.save, style: const TextStyle(fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -563,9 +560,9 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
     final accentColor = themeProvider.accentColor;
     final strings = context.watch<LocaleProvider>().strings;
     final currentUser = FirebaseAuth.instance.currentUser;
-    
+
     if (currentUser == null) {
-      return const Scaffold(body: Center(child: Text("Not logged in")));
+      return Scaffold(body: Center(child: Text(strings.notLoggedIn)));
     }
 
     return Scaffold(
@@ -645,13 +642,12 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
           ),
         ),
         actions: [
-          // Panic Camouflage Button (if enabled)
           Consumer<ChatProvider>(
             builder: (context, chatProv, child) {
               if (!chatProv.panicCamouflageEnabled) return const SizedBox.shrink();
               return IconButton(
                 icon: const Icon(Icons.shield_outlined, color: Colors.orangeAccent),
-                tooltip: 'Panik / Acil Kamuflaj',
+                tooltip: strings.panicTooltip,
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -664,7 +660,6 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
               );
             },
           ),
-          // Search button
           BouncyTap(
             onTap: () {
               setState(() {
@@ -694,13 +689,11 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
               ),
             ),
           ),
-          // QR Code Button
           IconButton(
             icon: Icon(Icons.qr_code_scanner_rounded, color: accentColor),
-            tooltip: 'QR Kod',
+            tooltip: strings.qrCodeTooltip,
             onPressed: () => _showQROptions(accentColor),
           ),
-          // More Menu
           PopupMenuButton<String>(
             icon: Icon(Icons.more_vert, color: accentColor.withValues(alpha: 0.6)),
             color: Colors.black.withValues(alpha: 0.95),
@@ -730,7 +723,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                   children: [
                     Icon(Icons.settings_outlined, color: accentColor, size: 18),
                     const SizedBox(width: 10),
-                    Text('AYARLAR', style: TextStyle(color: accentColor, letterSpacing: 1.5, fontSize: 12)),
+                    Text(strings.settingsMenu, style: TextStyle(color: accentColor, letterSpacing: 1.5, fontSize: 12)),
                   ],
                 ),
               ),
@@ -740,12 +733,12 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                   children: [
                     Icon(Icons.logout, color: Colors.red.shade400, size: 18),
                     const SizedBox(width: 10),
-                    Text('ÇIKIŞ YAP', style: TextStyle(color: Colors.red.shade400, letterSpacing: 1.5, fontSize: 12)),
+                    Text(strings.logoutMenu, style: TextStyle(color: Colors.red.shade400, letterSpacing: 1.5, fontSize: 12)),
                   ],
                 ),
               ),
             ],
-          )
+          ),
         ],
       ),
       body: Stack(
@@ -825,6 +818,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   }
 
   Widget _buildErrorState(String error, Color accentColor) {
+    final strings = context.watch<LocaleProvider>().strings;
     return Center(
       child: Padding(
         padding: const EdgeInsets.all(32),
@@ -834,7 +828,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
             Icon(Icons.error_outline, size: 48, color: Colors.red.shade400.withValues(alpha: 0.5)),
             const SizedBox(height: 16),
             Text(
-              'AĞ VERİSİ ALINAMADI',
+              strings.networkDataError,
               style: TextStyle(color: Colors.red.shade400, fontWeight: FontWeight.bold, letterSpacing: 2),
             ),
           ],
@@ -923,6 +917,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   }
 
   Widget _buildEmptyState(Color accentColor) {
+    final strings = context.watch<LocaleProvider>().strings;
     final isFiltered = _filterType != RoomFilterType.all || _searchQuery.isNotEmpty;
 
     return Center(
@@ -958,7 +953,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
             ),
             const SizedBox(height: 20),
             Text(
-              isFiltered ? 'EŞLEŞEN SOHBET BULUNAMADI' : '// GÜVENLİ İLETİŞİM AĞI //',
+              isFiltered ? strings.noMatchingChats : strings.secureNetworkEmptyTitle,
               textAlign: TextAlign.center,
               style: TextStyle(
                 fontSize: 14,
@@ -970,9 +965,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
             ),
             const SizedBox(height: 8),
             Text(
-              isFiltered
-                  ? 'Filtrelemeyi sıfırlamak için arama veya filtre kapsüllerine dokunun'
-                  : 'Aktif bir şifreli oda bulunmuyor. Yeni bir düğüm (node) oluşturun veya QR ile bağlanın.',
+              isFiltered ? strings.noMatchingChatsSub : strings.secureNetworkEmptySub,
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: Colors.white.withValues(alpha: 0.5),
@@ -998,7 +991,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                     border: Border.all(color: accentColor.withValues(alpha: 0.5)),
                   ),
                   child: Text(
-                    'FİLTRELERİ SIFIRLA',
+                    strings.resetFilters,
                     style: TextStyle(
                       color: accentColor,
                       fontSize: 12,
@@ -1031,7 +1024,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                       Icon(Icons.add_rounded, color: accentColor, size: 18),
                       const SizedBox(width: 8),
                       Text(
-                        'YENİ ODA OLUŞTUR',
+                        strings.createNewRoomBtn,
                         style: TextStyle(
                           color: accentColor,
                           fontSize: 12,
@@ -1050,10 +1043,15 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
     );
   }
 
-  Widget _buildRoomList(List<QueryDocumentSnapshot> rawDocs, User currentUser, ThemeProvider themeProvider, BuildContext context) {
+  Widget _buildRoomList(
+    List<QueryDocumentSnapshot> rawDocs,
+    User currentUser,
+    ThemeProvider themeProvider,
+    BuildContext context,
+  ) {
     final accentColor = themeProvider.accentColor;
+    final strings = context.watch<LocaleProvider>().strings;
 
-    // 1. Map to RoomModel and resolve true roomCode for decryption & message listening
     final roomsWithDocs = rawDocs.map((doc) {
       final data = doc.data() as Map<String, dynamic>;
       final room = RoomModel.fromMap(data);
@@ -1062,7 +1060,6 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
       if (targetCode.isEmpty || targetCode == doc.id) {
         if (_roomIdToRealCode.containsKey(doc.id)) {
           targetCode = _roomIdToRealCode[doc.id]!;
-          // Firestore dökümanını otomatik onar ki bir daha kaybolmasın
           doc.reference.update({'roomCode': targetCode}).catchError((_) {});
         } else {
           targetCode = room.roomCode.isNotEmpty ? room.roomCode : doc.id;
@@ -1077,7 +1074,6 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
       return {'doc': doc, 'room': room, 'code': targetCode};
     }).toList();
 
-    // 2. Filter by search query and filter pills if active
     final filtered = roomsWithDocs.where((item) {
       final code = item['code'] as String;
       final room = item['room'] as RoomModel;
@@ -1096,12 +1092,11 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
       final cLower = code.toLowerCase();
 
       return cLower.contains(_searchQuery) ||
-             alias.contains(_searchQuery) ||
-             roomName.contains(_searchQuery) ||
-             lastMsg.contains(_searchQuery);
+          alias.contains(_searchQuery) ||
+          roomName.contains(_searchQuery) ||
+          lastMsg.contains(_searchQuery);
     }).toList();
 
-    // 3. Sort: Pinned first, then by lastMessageTime descending
     filtered.sort((a, b) {
       final aCode = a['code'] as String;
       final bCode = b['code'] as String;
@@ -1123,19 +1118,33 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
     }
 
     String formatLastMessage(String? msg) {
-      if (msg == null || msg.trim().isEmpty) return 'Sohbet başlatıldı';
-      final lower = msg.toLowerCase();
+      if (msg == null || msg.trim().isEmpty) return strings.chatStarted;
+      final trimmed = msg.trim();
+      final lower = trimmed.toLowerCase();
+      if (lower == 'oda oluşturuldu' || lower == 'room created') {
+        return strings.roomCreatedPreview;
+      }
+      if (trimmed.startsWith('📞')) {
+        if (lower.contains('sonlandırıldı') || lower.contains('ended')) {
+          final dur = RegExp(r'(\d{2}:\d{2})').firstMatch(trimmed)?.group(1);
+          if (dur != null) return strings.callEndedMsg(dur);
+        }
+        return strings.callStartedMsg;
+      }
       if (lower.contains('[audio]') || lower.contains('.m4a') || lower.contains('.mp3') || lower.contains('voice_')) {
-        return '🎤 Sesli mesaj';
+        return strings.voiceMessagePreview;
+      }
+      if (lower.contains('[media_group]')) {
+        return strings.mediaAlbumPreview;
       }
       if (lower.contains('[image]') || lower.contains('.jpg') || lower.contains('.jpeg') || lower.contains('.png') || lower.contains('.webp')) {
-        return '📷 Fotoğraf';
+        return strings.photoPreview;
       }
       if (lower.contains('[video]') || lower.contains('.mp4') || lower.contains('.mov')) {
-        return '🎥 Video';
+        return strings.videoPreview;
       }
       if (lower.contains('[location]') || lower.contains('signal') || lower.contains('konum')) {
-        return '📍 Konum paylaşıldı';
+        return strings.locationPreview;
       }
       return msg;
     }
@@ -1149,156 +1158,155 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
         physics: const AlwaysScrollableScrollPhysics(parent: BouncingScrollPhysics()),
         itemCount: filtered.length,
         itemBuilder: (context, index) {
-        final item = filtered[index];
-        final doc = item['doc'] as QueryDocumentSnapshot;
-        final room = item['room'] as RoomModel;
-        final targetCode = item['code'] as String;
-        final isPinned = _pinnedCodes.contains(targetCode);
-        final alias = _roomAliases[targetCode];
+          final item = filtered[index];
+          final doc = item['doc'] as QueryDocumentSnapshot;
+          final room = item['room'] as RoomModel;
+          final targetCode = item['code'] as String;
+          final isPinned = _pinnedCodes.contains(targetCode);
+          final alias = _roomAliases[targetCode];
 
-        String timeString = '';
-        if (room.lastMessageTime != null) {
-          final now = DateTime.now();
-          final msgDate = room.lastMessageTime!;
-          if (now.difference(msgDate).inDays == 0) {
-            timeString = DateFormat('HH:mm').format(msgDate);
-          } else if (now.difference(msgDate).inDays < 7) {
-            timeString = DateFormat('EEE').format(msgDate);
-          } else {
-            timeString = DateFormat('dd/MM').format(msgDate);
+          String timeString = '';
+          if (room.lastMessageTime != null) {
+            final now = DateTime.now();
+            final msgDate = room.lastMessageTime!;
+            if (now.difference(msgDate).inDays == 0) {
+              timeString = DateFormat('HH:mm').format(msgDate);
+            } else if (now.difference(msgDate).inDays < 7) {
+              timeString = DateFormat('EEE').format(msgDate);
+            } else {
+              timeString = DateFormat('dd/MM').format(msgDate);
+            }
           }
-        }
 
-        final displayName = alias != null && alias.isNotEmpty
-            ? alias
-            : (room.roomName.isNotEmpty
-                ? room.roomName
-                : (targetCode.length > 14 ? '${targetCode.substring(0, 14)}...' : targetCode));
+          final displayName = alias != null && alias.isNotEmpty
+              ? alias
+              : (room.roomName.isNotEmpty
+                  ? room.roomName
+                  : (targetCode.length > 14 ? '${targetCode.substring(0, 14)}...' : targetCode));
 
-        final String avatarInitial = displayName.isNotEmpty
-            ? displayName.trim()[0].toUpperCase()
-            : '#';
-        final isCurrentNavigating = _isNavigating && _navigatingRoomCode == targetCode;
+          final String avatarInitial = displayName.isNotEmpty
+              ? displayName.trim()[0].toUpperCase()
+              : '#';
+          final isCurrentNavigating = _isNavigating && _navigatingRoomCode == targetCode;
 
-        return Dismissible(
-          key: Key(doc.id),
-          direction: DismissDirection.horizontal,
-          // Right swipe: Pin / Unpin
-          background: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-            alignment: Alignment.centerLeft,
-            padding: const EdgeInsets.only(left: 20),
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                colors: [
-                  accentColor.withValues(alpha: 0.8),
-                  accentColor.withValues(alpha: 0.3),
+          return Dismissible(
+            key: Key(doc.id),
+            direction: DismissDirection.horizontal,
+            background: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+              alignment: Alignment.centerLeft,
+              padding: const EdgeInsets.only(left: 20),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [
+                    accentColor.withValues(alpha: 0.8),
+                    accentColor.withValues(alpha: 0.3),
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
+                    color: Colors.black,
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    isPinned ? strings.unpinSwipe : strings.pinSwipe,
+                    style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
+                  ),
                 ],
               ),
-              borderRadius: BorderRadius.circular(16),
             ),
-            child: Row(
-              children: [
-                Icon(
-                  isPinned ? Icons.push_pin_outlined : Icons.push_pin_rounded,
-                  color: Colors.black,
-                ),
-                const SizedBox(width: 8),
-                Text(
-                  isPinned ? 'SABİTİ KALDIR' : 'BAŞA SABİTLE',
-                  style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-              ],
-            ),
-          ),
-          // Left swipe: Delete
-          secondaryBackground: Container(
-            margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-            alignment: Alignment.centerRight,
-            padding: const EdgeInsets.only(right: 20),
-            decoration: BoxDecoration(
-              color: Colors.red.shade900.withValues(alpha: 0.4),
-              borderRadius: BorderRadius.circular(16),
-              border: Border.all(color: Colors.red.shade800.withValues(alpha: 0.5)),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                Text(
-                  'SOHBETİ SİL',
-                  style: TextStyle(color: Colors.red.shade300, fontWeight: FontWeight.bold, fontSize: 12),
-                ),
-                const SizedBox(width: 8),
-                Icon(Icons.delete_outline_rounded, color: Colors.red.shade400),
-              ],
-            ),
-          ),
-          confirmDismiss: (direction) async {
-            if (direction == DismissDirection.startToEnd) {
-              HapticFeedback.mediumImpact();
-              await PreferencesService.togglePinRoom(targetCode);
-              await _loadLocalSettings();
-              return false; // Do not dismiss from list, just update pin status
-            } else {
-              return await showDialog<bool>(
-                context: context,
-                builder: (ctx) => AlertDialog(
-                  backgroundColor: Colors.black.withValues(alpha: 0.95),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                    side: BorderSide(color: accentColor.withValues(alpha: 0.3)),
+            secondaryBackground: Container(
+              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+              alignment: Alignment.centerRight,
+              padding: const EdgeInsets.only(right: 20),
+              decoration: BoxDecoration(
+                color: Colors.red.shade900.withValues(alpha: 0.4),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: Colors.red.shade800.withValues(alpha: 0.5)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  Text(
+                    strings.deleteChatSwipe,
+                    style: TextStyle(color: Colors.red.shade300, fontWeight: FontWeight.bold, fontSize: 12),
                   ),
-                  title: Text('SOHBETİ SİL?', style: TextStyle(color: accentColor, letterSpacing: 2, fontSize: 16)),
-                  content: const Text(
-                    'Bu sohbeti aktif sohbetlerinizden kaldırmak istiyor musunuz?',
-                    style: TextStyle(color: Colors.white70),
+                  const SizedBox(width: 8),
+                  Icon(Icons.delete_outline_rounded, color: Colors.red.shade400),
+                ],
+              ),
+            ),
+            confirmDismiss: (direction) async {
+              if (direction == DismissDirection.startToEnd) {
+                HapticFeedback.mediumImpact();
+                await PreferencesService.togglePinRoom(targetCode);
+                await _loadLocalSettings();
+                return false;
+              } else {
+                return await showDialog<bool>(
+                      context: context,
+                      builder: (ctx) => AlertDialog(
+                        backgroundColor: Colors.black.withValues(alpha: 0.95),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                          side: BorderSide(color: accentColor.withValues(alpha: 0.3)),
+                        ),
+                        title: Text(strings.deleteChatConfirmTitle, style: TextStyle(color: accentColor, letterSpacing: 2, fontSize: 16)),
+                        content: Text(
+                          strings.deleteChatConfirmBody,
+                          style: const TextStyle(color: Colors.white70),
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, false),
+                            child: Text(strings.cancel, style: TextStyle(color: accentColor.withValues(alpha: 0.5))),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.pop(ctx, true),
+                            child: Text(strings.delete, style: TextStyle(color: Colors.red.shade400)),
+                          ),
+                        ],
+                      ),
+                    ) ??
+                    false;
+              }
+            },
+            onDismissed: (_) async {
+              final chatProvider = context.read<ChatProvider>();
+              await chatProvider.removeRoomLocal(targetCode);
+            },
+            child: BouncyTap(
+              scaleFactor: 0.98,
+              child: Container(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
+                decoration: BoxDecoration(
+                  color: isPinned
+                      ? accentColor.withValues(alpha: 0.1)
+                      : const Color(0xFF0C0C0C).withValues(alpha: 0.85),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: isPinned
+                        ? accentColor.withValues(alpha: 0.5)
+                        : accentColor.withValues(alpha: 0.15),
+                    width: isPinned ? 1.5 : 1,
                   ),
-                  actions: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, false),
-                      child: Text('İPTAL', style: TextStyle(color: accentColor.withValues(alpha: 0.5))),
-                    ),
-                    TextButton(
-                      onPressed: () => Navigator.pop(ctx, true),
-                      child: Text('SİL', style: TextStyle(color: Colors.red.shade400)),
+                  boxShadow: [
+                    BoxShadow(
+                      color: isPinned ? accentColor.withValues(alpha: 0.1) : Colors.transparent,
+                      blurRadius: 10,
+                      spreadRadius: 1,
                     ),
                   ],
                 ),
-              ) ?? false;
-            }
-          },
-          onDismissed: (_) async {
-            final chatProvider = context.read<ChatProvider>();
-            await chatProvider.removeRoomLocal(targetCode);
-          },
-          child: BouncyTap(
-            scaleFactor: 0.98,
-            child: Container(
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 5),
-              decoration: BoxDecoration(
-                color: isPinned
-                    ? accentColor.withValues(alpha: 0.1)
-                    : const Color(0xFF0C0C0C).withValues(alpha: 0.85),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(
-                  color: isPinned
-                      ? accentColor.withValues(alpha: 0.5)
-                      : accentColor.withValues(alpha: 0.15),
-                  width: isPinned ? 1.5 : 1,
-                ),
-                boxShadow: [
-                  BoxShadow(
-                    color: isPinned ? accentColor.withValues(alpha: 0.1) : Colors.transparent,
-                    blurRadius: 10,
-                    spreadRadius: 1,
-                  ),
-                ],
-              ),
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(16),
-                child: Material(
-                  color: Colors.transparent,
-                  child: InkWell(
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(16),
+                  child: Material(
+                    color: Colors.transparent,
+                    child: InkWell(
                       splashColor: accentColor.withValues(alpha: 0.15),
                       highlightColor: accentColor.withValues(alpha: 0.08),
                       onTap: () => _handleRoomTap(targetCode),
@@ -1306,158 +1314,157 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                       child: Padding(
                         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                         child: Row(
-                        children: [
-                          // Minimalist Stealth Room Avatar
-                          Stack(
-                            children: [
-                              Container(
-                                width: 46,
-                                height: 46,
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(10),
-                                  color: accentColor.withValues(alpha: isPinned ? 0.16 : 0.08),
-                                  border: Border.all(
-                                    color: accentColor.withValues(alpha: isPinned ? 0.6 : 0.25),
-                                    width: isPinned ? 1.4 : 1.0,
-                                  ),
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    avatarInitial,
-                                    style: TextStyle(
-                                      color: accentColor,
-                                      fontWeight: FontWeight.bold,
-                                      fontSize: 18,
-                                      fontFamily: 'Courier',
-                                      letterSpacing: 1,
+                          children: [
+                            Stack(
+                              children: [
+                                Container(
+                                  width: 46,
+                                  height: 46,
+                                  decoration: BoxDecoration(
+                                    borderRadius: BorderRadius.circular(10),
+                                    color: accentColor.withValues(alpha: isPinned ? 0.16 : 0.08),
+                                    border: Border.all(
+                                      color: accentColor.withValues(alpha: isPinned ? 0.6 : 0.25),
+                                      width: isPinned ? 1.4 : 1.0,
                                     ),
                                   ),
-                                ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: Container(
-                                  padding: const EdgeInsets.all(3),
-                                  decoration: BoxDecoration(
-                                    color: Colors.black,
-                                    borderRadius: BorderRadius.circular(4),
-                                    border: Border.all(color: accentColor.withValues(alpha: 0.3), width: 1),
-                                  ),
-                                  child: Icon(
-                                    room.isGroup ? Icons.group_rounded : Icons.lock_outline_rounded,
-                                    color: accentColor.withValues(alpha: 0.8),
-                                    size: 10,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(width: 14),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    if (isPinned) ...[
-                                      Icon(Icons.push_pin_rounded, color: accentColor, size: 14),
-                                      const SizedBox(width: 6),
-                                    ],
-                                    Expanded(
-                                      child: Text(
-                                        displayName,
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          fontSize: 14,
-                                          color: isPinned ? Colors.white : accentColor.withValues(alpha: 0.9),
-                                          letterSpacing: 0.5,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                  child: Center(
+                                    child: Text(
+                                      avatarInitial,
+                                      style: TextStyle(
+                                        color: accentColor,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 18,
+                                        fontFamily: 'Courier',
+                                        letterSpacing: 1,
                                       ),
                                     ),
-                                  ],
+                                  ),
                                 ),
-                                const SizedBox(height: 5),
-                                Text(
-                                  formatLastMessage(room.lastMessage),
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: TextStyle(
-                                    color: Colors.white.withValues(alpha: 0.5),
-                                    fontSize: 13,
+                                Positioned(
+                                  right: 0,
+                                  bottom: 0,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(3),
+                                    decoration: BoxDecoration(
+                                      color: Colors.black,
+                                      borderRadius: BorderRadius.circular(4),
+                                      border: Border.all(color: accentColor.withValues(alpha: 0.3), width: 1),
+                                    ),
+                                    child: Icon(
+                                      room.isGroup ? Icons.group_rounded : Icons.lock_outline_rounded,
+                                      color: accentColor.withValues(alpha: 0.8),
+                                      size: 10,
+                                    ),
                                   ),
                                 ),
                               ],
                             ),
-                          ),
-                          const SizedBox(width: 10),
-                          Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            crossAxisAlignment: CrossAxisAlignment.end,
-                            children: [
-                              Text(
-                                timeString,
-                                style: TextStyle(
-                                  color: accentColor.withValues(alpha: 0.5),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.w600,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              if (isCurrentNavigating)
-                                SizedBox(
-                                  width: 16,
-                                  height: 16,
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: accentColor,
-                                  ),
-                                )
-                              else if (isPinned)
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                  decoration: BoxDecoration(
-                                    color: accentColor.withValues(alpha: 0.15),
-                                    borderRadius: BorderRadius.circular(4),
-                                  ),
-                                  child: Text(
-                                    'SABİT',
-                                    style: TextStyle(color: accentColor, fontSize: 9, fontWeight: FontWeight.bold),
-                                  ),
-                                )
-                              else
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Icon(
-                                      Icons.people_outline,
-                                      size: 12,
-                                      color: accentColor.withValues(alpha: 0.3),
-                                    ),
-                                    const SizedBox(width: 4),
-                                    Text(
-                                      '${room.members.length}',
-                                      style: TextStyle(
-                                        color: accentColor.withValues(alpha: 0.3),
-                                        fontSize: 11,
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      if (isPinned) ...[
+                                        Icon(Icons.push_pin_rounded, color: accentColor, size: 14),
+                                        const SizedBox(width: 6),
+                                      ],
+                                      Expanded(
+                                        child: Text(
+                                          displayName,
+                                          style: TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                            fontSize: 14,
+                                            color: isPinned ? Colors.white : accentColor.withValues(alpha: 0.9),
+                                            letterSpacing: 0.5,
+                                          ),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                        ),
                                       ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 5),
+                                  Text(
+                                    formatLastMessage(room.lastMessage),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: TextStyle(
+                                      color: Colors.white.withValues(alpha: 0.5),
+                                      fontSize: 13,
                                     ),
-                                  ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 10),
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  timeString,
+                                  style: TextStyle(
+                                    color: accentColor.withValues(alpha: 0.5),
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w600,
+                                  ),
                                 ),
-                            ],
-                          ),
-                        ],
+                                const SizedBox(height: 6),
+                                if (isCurrentNavigating)
+                                  SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: accentColor,
+                                    ),
+                                  )
+                                else if (isPinned)
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: accentColor.withValues(alpha: 0.15),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Text(
+                                      strings.pinnedBadge,
+                                      style: TextStyle(color: accentColor, fontSize: 9, fontWeight: FontWeight.bold),
+                                    ),
+                                  )
+                                else
+                                  Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        Icons.people_outline,
+                                        size: 12,
+                                        color: accentColor.withValues(alpha: 0.3),
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        '${room.members.length}',
+                                        style: TextStyle(
+                                          color: accentColor.withValues(alpha: 0.3),
+                                          fontSize: 11,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),
                 ),
               ),
             ),
-          ),
-        );
-    },
+          );
+        },
       ),
     );
   }

@@ -3,14 +3,18 @@ import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:confetti/confetti.dart';
 import 'package:flutter_colorpicker/flutter_colorpicker.dart';
+import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:screenshot_callback/screenshot_callback.dart';
 
 import '../providers/chat_provider.dart';
+import '../providers/call_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
 import '../widgets/matrix_background.dart';
 import '../models/message.dart';
 import '../utils/color_utils.dart';
+import '../utils/app_strings.dart';
+import 'call_screen.dart';
 
 import '../widgets/chat_app_bar.dart';
 import '../widgets/chat_message_item.dart';
@@ -33,6 +37,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   bool _showMatrix = false;
   late ScreenshotCallback _screenshotCallback;
 
+  ChatProvider? _chatProvider;
+  CallProvider? _callProvider;
+
   final Set<String> _selectedMessages = {};
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToBottom = false;
@@ -52,40 +59,48 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       }
     });
 
-    // Mark user as actively viewing chat screen
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        context.read<ChatProvider>().setUserInChat(true);
+      if (!mounted) return;
+      final chatProvider = context.read<ChatProvider>();
+      final callProvider = context.read<CallProvider>();
+      chatProvider.setUserInChat(true);
+      callProvider.watchRoomCalls(
+        chatProvider.roomCode,
+        chatProvider.currentUserId,
+      );
+
+      if (chatProvider.tapToRevealEnabled) {
+        final strings = context.read<LocaleProvider>().strings;
+        CyberHUD.show(context, message: strings.tapToRevealHintBubble);
       }
     });
 
     _screenshotCallback = ScreenshotCallback();
     _screenshotCallback.addListener(() {
       if (mounted) {
-        final nick = context.read<ChatProvider>().nickname ?? 'Kullanıcı';
-        context.read<ChatProvider>().sendMessage(
-          "⚠️ [SİSTEM UYARISI] $nick ekran görüntüsü aldı!",
-          senderIdOverride: 'system_bot',
-          nicknameOverride: 'SİSTEM',
-        );
-      }
-    });
-
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      final chatProvider = context.read<ChatProvider>();
-      if (chatProvider.tapToRevealEnabled) {
         final strings = context.read<LocaleProvider>().strings;
-        CyberHUD.show(context, message: strings.tapToRevealHintBubble);
+        final nick = context.read<ChatProvider>().nickname ?? strings.unknownUser;
+        context.read<ChatProvider>().sendMessage(
+          strings.screenshotWarningMsg(nick),
+          senderIdOverride: 'system_bot',
+          nicknameOverride: strings.systemSender,
+        );
       }
     });
   }
 
   @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _chatProvider ??= context.read<ChatProvider>();
+    _callProvider ??= context.read<CallProvider>();
+  }
+
+  @override
   void dispose() {
-    // Mark user as no longer viewing chat screen & stop typing indicator
-    context.read<ChatProvider>().setUserInChat(false);
-    context.read<ChatProvider>().updateTyping(false);
+    _chatProvider?.setUserInChat(false);
+    _chatProvider?.updateTyping(false);
+    _callProvider?.watchRoomCalls(null, null);
     WidgetsBinding.instance.removeObserver(this);
     _easterEggConfettiController.dispose();
     _scrollController.dispose();
@@ -95,16 +110,17 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    final provider = context.read<ChatProvider>();
+    final provider = _chatProvider;
+    if (provider == null) return;
+
     if (state == AppLifecycleState.resumed) {
       provider.updatePresence(true);
       provider.setUserInChat(true);
-      NotificationService.currentActiveRoomCode = provider.roomCode;
     } else if (state == AppLifecycleState.paused ||
-        state == AppLifecycleState.inactive) {
+        state == AppLifecycleState.detached) {
       provider.setUserInChat(false);
       provider.updatePresence(false);
-      NotificationService.currentActiveRoomCode = null;
+      NotificationService.setActiveChatRoom(null, inChat: false);
     }
   }
 
@@ -136,6 +152,194 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     _easterEggConfettiController.play();
   }
 
+  Widget _buildWhatsAppCallBanner(
+    BuildContext context,
+    CallProvider callProvider,
+    AppStrings strings,
+  ) {
+    // Active Call Banner (WhatsApp-style green bar at top of chat)
+    if (callProvider.isInCall) {
+      return Material(
+        color: const Color(0xFF159D87),
+        child: InkWell(
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const CallScreen()),
+            );
+          },
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Row(
+              children: [
+                const Icon(
+                  Icons.phone_in_talk_rounded,
+                  color: Colors.white,
+                  size: 20,
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        '${strings.ongoingVoiceCallBanner} • ${callProvider.formattedDuration}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                          fontFeatures: [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Text(
+                        strings.tapToReturnToCall,
+                        style: TextStyle(
+                          color: Colors.white.withValues(alpha: 0.85),
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                IconButton(
+                  visualDensity: VisualDensity.compact,
+                  icon: Icon(
+                    callProvider.isMuted ? Icons.mic_off_rounded : Icons.mic_rounded,
+                    color: Colors.white,
+                    size: 20,
+                  ),
+                  onPressed: () => callProvider.toggleMute(),
+                ),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => callProvider.endCall(),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent,
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Text(
+                      strings.endCallBtn,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Incoming Call Banner (WhatsApp-style Join / Decline bar at top of chat)
+    if (callProvider.hasIncomingRoomCall) {
+      final caller = callProvider.incomingCallerName ?? strings.unknownUser;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: const Color(0xFF111922),
+          border: Border(
+            bottom: BorderSide(
+              color: const Color(0xFF159D87).withValues(alpha: 0.4),
+              width: 1,
+            ),
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF159D87).withValues(alpha: 0.2),
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(
+                Icons.ring_volume_rounded,
+                color: Color(0xFF159D87),
+                size: 18,
+              ),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    caller,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 13,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    strings.incomingVoiceCall,
+                    style: const TextStyle(
+                      color: Color(0xFF159D87),
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            GestureDetector(
+              onTap: () => callProvider.declineIncomingRoomCall(),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                decoration: BoxDecoration(
+                  color: Colors.redAccent.withValues(alpha: 0.9),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  strings.declineCallBtn,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            GestureDetector(
+              onTap: () async {
+                await callProvider.joinIncomingRoomCall(openCallScreen: true);
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF159D87),
+                  borderRadius: BorderRadius.circular(18),
+                ),
+                child: Text(
+                  strings.joinCallBtn,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 11,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return const SizedBox.shrink();
+  }
+
   void _showMessageOptions(BuildContext context, dynamic msg, bool isMe) {
     final strings = context.read<LocaleProvider>().strings;
 
@@ -149,7 +353,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               ListTile(
                 leading: const Icon(Icons.delete_forever, color: Colors.red),
                 title: Text(
-                  strings.isTr ? 'Kalıcı Olarak Sil' : 'Delete Permanently',
+                  strings.deletePermanently,
                   style: const TextStyle(color: Colors.red),
                 ),
                 onTap: () {
@@ -191,7 +395,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   color: Colors.blueAccent,
                 ),
                 title: Text(
-                  strings.isTr ? 'Mesajları Seç' : 'Select Messages',
+                  strings.selectMessages,
                   style: const TextStyle(color: Colors.white),
                 ),
                 onTap: () {
@@ -222,7 +426,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                 ListTile(
                   leading: const Icon(Icons.edit, color: Colors.blueAccent),
                   title: Text(
-                    strings.isTr ? 'Mesajı Düzenle' : 'Edit Message',
+                    strings.editMessage,
                     style: const TextStyle(color: Colors.white),
                   ),
                   onTap: () {
@@ -264,25 +468,26 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _showEditDialog(BuildContext context, Message msg) {
+    final strings = context.read<LocaleProvider>().strings;
     final controller = TextEditingController(text: msg.text);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: Theme.of(context).cardColor,
-        title: const Text('Edit Message', style: TextStyle(color: Colors.white)),
+        title: Text(strings.editMessage, style: const TextStyle(color: Colors.white)),
         content: TextField(
           controller: controller,
           style: const TextStyle(color: Colors.white),
-          decoration: const InputDecoration(
-            border: OutlineInputBorder(),
-            hintText: 'New text...',
-            hintStyle: TextStyle(color: Colors.white54),
+          decoration: InputDecoration(
+            border: const OutlineInputBorder(),
+            hintText: strings.editMessageHint,
+            hintStyle: const TextStyle(color: Colors.white54),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('CANCEL'),
+            child: Text(strings.cancel),
           ),
           ElevatedButton(
             onPressed: () {
@@ -292,7 +497,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               }
               Navigator.pop(ctx);
             },
-            child: const Text('SAVE'),
+            child: Text(strings.save),
           ),
         ],
       ),
@@ -300,12 +505,13 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   }
 
   void _copyCode() {
-    final code = context.read<ChatProvider>().roomCode ?? "";
+    final code = context.read<ChatProvider>().roomCode ?? '';
+    final strings = context.read<LocaleProvider>().strings;
     Clipboard.setData(ClipboardData(text: code));
     final accent = context.read<ThemeProvider>().accentColor;
     CyberHUD.show(
       context,
-      message: 'ODA KODU PANOYA KOPYALANDI',
+      message: strings.roomCodeCopied,
       icon: Icons.copy_rounded,
       accentColor: accent,
     );
@@ -316,11 +522,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     Color currentColor,
     ValueChanged<Color> onColorChanged,
   ) {
+    final strings = context.read<LocaleProvider>().strings;
     Color tempColor = currentColor;
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Pick a color'),
+        title: Text(strings.pickColorTitle),
         content: SingleChildScrollView(
           child: ColorPicker(
             pickerColor: currentColor,
@@ -330,11 +537,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         ),
         actions: [
           TextButton(
-            child: const Text('CANCEL'),
+            child: Text(strings.cancel),
             onPressed: () => Navigator.of(ctx).pop(),
           ),
           ElevatedButton(
-            child: const Text('APPLY'),
+            child: Text(strings.applyBtn),
             onPressed: () {
               onColorChanged(tempColor);
               Navigator.of(ctx).pop();
@@ -348,6 +555,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   void _showSettingsMenu(BuildContext context) {
     final chatProvider = context.read<ChatProvider>();
     final themeProvider = context.read<ThemeProvider>();
+    final strings = context.read<LocaleProvider>().strings;
 
     final nicknameController = TextEditingController(
       text: chatProvider.nickname,
@@ -378,29 +586,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(16),
             ),
-            title: const Text(
-              'SETTINGS',
-              style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
+            title: Text(
+              strings.settingsTitle.toUpperCase(),
+              style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 1.5),
             ),
             content: SingleChildScrollView(
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
-                  const Text('Change Nickname:'),
+                  Text('${strings.changeNickname}:'),
                   const SizedBox(height: 8),
                   TextField(
                     controller: nicknameController,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      hintText: 'Enter new nickname',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      hintText: strings.enterNewNickname,
                     ),
                   ),
                   const SizedBox(height: 16),
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Anonymous Voice:'),
+                      Expanded(child: Text('${strings.anonymousVoice}:')),
                       Switch(
                         value: chatProvider.isAnonymousVoice,
                         activeThumbColor: themeProvider.accentColor,
@@ -415,7 +623,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Tap-to-Reveal:'),
+                      Expanded(child: Text('${strings.tapToReveal}:')),
                       Switch(
                         value: chatProvider.tapToRevealEnabled,
                         activeThumbColor: themeProvider.accentColor,
@@ -430,7 +638,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      const Text('Panic Camouflage:'),
+                      Expanded(child: Text('${strings.panicCamouflage}:')),
                       Switch(
                         value: chatProvider.panicCamouflageEnabled,
                         activeThumbColor: themeProvider.accentColor,
@@ -443,7 +651,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Text('My Bubble Color:'),
+                  Text('${strings.myBubbleColor}:'),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -496,7 +704,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     ],
                   ),
                   const SizedBox(height: 16),
-                  const Text('Other Bubble Color:'),
+                  Text('${strings.otherBubbleColor}:'),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 8,
@@ -554,7 +762,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             actions: [
               TextButton(
                 onPressed: () => Navigator.pop(ctx),
-                child: const Text('CLOSE'),
+                child: Text(strings.closeBtn),
               ),
               ElevatedButton(
                 onPressed: () {
@@ -564,7 +772,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   }
                   Navigator.pop(ctx);
                 },
-                child: const Text('SAVE'),
+                child: Text(strings.save),
               ),
             ],
           );
@@ -573,45 +781,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     );
   }
 
-  void _showCommandsDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Colors.black87,
-        title: const Text('Sistem Komutları', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 16)),
-        content: const SingleChildScrollView(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text('⚙️ Terminal Komutları', style: TextStyle(color: Color(0xFF159D87), fontWeight: FontWeight.bold, fontSize: 13)),
-              SizedBox(height: 8),
-              Text(
-                '!help : Yardım menüsünü gösterir\n'
-                '!clear [sayı] : Son mesajları temizler\n'
-                '!wipe : Ekrandaki akışı anında temizler\n'
-                '!note [yazı] : Şifreli ortak not ekler\n'
-                '!notes : Kayıtlı notları listeler\n'
-                '!remind [yazı] [sn] : Hatırlatıcı alarm kurar',
-                style: TextStyle(color: Colors.white70, fontSize: 12, height: 1.5),
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('KAPAT', style: TextStyle(color: Color(0xFF159D87))),
-          ),
-        ],
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
+    final callProvider = context.watch<CallProvider>();
     final themeProvider = context.watch<ThemeProvider>();
+    final strings = context.watch<LocaleProvider>().strings;
     final accent = themeProvider.accentColor;
 
     if (chatProvider.roomCode == null) {
@@ -626,15 +801,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       );
     }
 
-    // Lock removed
-
     return Scaffold(
       extendBodyBehindAppBar: true,
       appBar: ChatAppBar(
         selectedMessages: _selectedMessages.toList(),
         onClearSelection: () => setState(() => _selectedMessages.clear()),
         onShowSettings: () => _showSettingsMenu(context),
-        onShowCommands: () => _showCommandsDialog(context),
         onCopyCode: _copyCode,
       ),
       body: Stack(
@@ -642,10 +814,18 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         children: [
           if (_showMatrix)
             Positioned.fill(child: MatrixBackground(color: accent)),
+          // Keep audio renderer alive when call is minimized to ChatScreen
+          if (callProvider.isInCall && callProvider.remoteStream != null)
+            SizedBox(
+              width: 0,
+              height: 0,
+              child: RTCVideoView(callProvider.remoteRenderer),
+            ),
           SafeArea(
             child: Column(
               children: [
                 const SystemStatusBanner(),
+                _buildWhatsAppCallBanner(context, callProvider, strings),
                 Expanded(
                   child: chatProvider.isLoading && chatProvider.messages.isEmpty
                       ? Center(
@@ -662,7 +842,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                '[ SECURE CHANNEL CONNECTING... ]',
+                                strings.secureChannelConnecting,
                                 style: TextStyle(
                                   color: accent.withValues(alpha: 0.6),
                                   fontFamily: 'Courier',
@@ -676,70 +856,88 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         )
                       : NotificationListener<ScrollNotification>(
                           onNotification: (ScrollNotification scrollInfo) {
-                            if (!chatProvider.isLoading && 
-                                chatProvider.hasMoreMessages && 
-                                scrollInfo.metrics.pixels == scrollInfo.metrics.maxScrollExtent) {
+                            if (!chatProvider.isLoading &&
+                                chatProvider.hasMoreMessages &&
+                                scrollInfo.metrics.pixels ==
+                                    scrollInfo.metrics.maxScrollExtent) {
                               chatProvider.loadMoreMessages();
                             }
                             return false;
                           },
                           child: ListView.builder(
                             controller: _scrollController,
-                            keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-                            physics: const BouncingScrollPhysics(parent: AlwaysScrollableScrollPhysics()),
-                            reverse: true,
-                            itemCount: chatProvider.messages.length + (chatProvider.hasMoreMessages ? 1 : 0),
-                      itemBuilder: (context, index) {
-                        if (index == chatProvider.messages.length) {
-                          return Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Center(
-                              child: Text(
-                                '[FETCHING ARCHIVE...]',
-                                style: TextStyle(
-                                  color: accent.withValues(alpha: 0.8),
-                                  fontFamily: 'Courier',
-                                  fontWeight: FontWeight.bold,
-                                  fontSize: 12,
-                                ),
-                              ),
+                            keyboardDismissBehavior:
+                                ScrollViewKeyboardDismissBehavior.onDrag,
+                            physics: const BouncingScrollPhysics(
+                              parent: AlwaysScrollableScrollPhysics(),
                             ),
-                          );
-                        }
-
-                        final msg = chatProvider.messages[index];
-                        bool showDateDivider = false;
-                        if (index == chatProvider.messages.length - 1) {
-                          showDateDivider = true;
-                        } else {
-                          final nextMsg = chatProvider.messages[index + 1];
-                          final currentMsgDate = DateTime(msg.timestamp.year, msg.timestamp.month, msg.timestamp.day);
-                          final nextMsgDate = DateTime(nextMsg.timestamp.year, nextMsg.timestamp.month, nextMsg.timestamp.day);
-                          if (currentMsgDate != nextMsgDate) {
-                            showDateDivider = true;
-                          }
-                        }
-
-                        return ChatMessageItem(
-                          key: ValueKey(msg.id),
-                          msg: msg,
-                          showDateDivider: showDateDivider,
-                          isSelected: _selectedMessages.contains(msg.id),
-                          isSelectionMode: _selectedMessages.isNotEmpty,
-                          onToggleSelection: () {
-                            setState(() {
-                              if (_selectedMessages.contains(msg.id)) {
-                                _selectedMessages.remove(msg.id);
-                              } else {
-                                _selectedMessages.add(msg.id);
+                            reverse: true,
+                            itemCount:
+                                chatProvider.messages.length +
+                                (chatProvider.hasMoreMessages ? 1 : 0),
+                            itemBuilder: (context, index) {
+                              if (index == chatProvider.messages.length) {
+                                return Padding(
+                                  padding: const EdgeInsets.all(16.0),
+                                  child: Center(
+                                    child: Text(
+                                      strings.fetchingArchive,
+                                      style: TextStyle(
+                                        color: accent.withValues(alpha: 0.8),
+                                        fontFamily: 'Courier',
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 12,
+                                      ),
+                                    ),
+                                  ),
+                                );
                               }
-                            });
-                          },
-                          onLongPress: () => _showMessageOptions(context, msg, msg.nickname == chatProvider.nickname),
-                        );
-                      },
-                    ),
-                  ),
+
+                              final msg = chatProvider.messages[index];
+                              bool showDateDivider = false;
+                              if (index == chatProvider.messages.length - 1) {
+                                showDateDivider = true;
+                              } else {
+                                final nextMsg = chatProvider.messages[index + 1];
+                                final currentMsgDate = DateTime(
+                                  msg.timestamp.year,
+                                  msg.timestamp.month,
+                                  msg.timestamp.day,
+                                );
+                                final nextMsgDate = DateTime(
+                                  nextMsg.timestamp.year,
+                                  nextMsg.timestamp.month,
+                                  nextMsg.timestamp.day,
+                                );
+                                if (currentMsgDate != nextMsgDate) {
+                                  showDateDivider = true;
+                                }
+                              }
+
+                              return ChatMessageItem(
+                                key: ValueKey(msg.id),
+                                msg: msg,
+                                showDateDivider: showDateDivider,
+                                isSelected: _selectedMessages.contains(msg.id),
+                                isSelectionMode: _selectedMessages.isNotEmpty,
+                                onToggleSelection: () {
+                                  setState(() {
+                                    if (_selectedMessages.contains(msg.id)) {
+                                      _selectedMessages.remove(msg.id);
+                                    } else {
+                                      _selectedMessages.add(msg.id);
+                                    }
+                                  });
+                                },
+                                onLongPress: () => _showMessageOptions(
+                                  context,
+                                  msg,
+                                  msg.nickname == chatProvider.nickname,
+                                ),
+                              );
+                            },
+                          ),
+                        ),
                 ),
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 250),
@@ -749,7 +947,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       position: Tween<Offset>(
                         begin: const Offset(0.0, 0.4),
                         end: Offset.zero,
-                      ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutCubic)),
+                      ).animate(
+                        CurvedAnimation(
+                          parent: animation,
+                          curve: Curves.easeOutCubic,
+                        ),
+                      ),
                       child: FadeTransition(opacity: animation, child: child),
                     );
                   },
@@ -759,9 +962,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                           alignment: Alignment.centerLeft,
                           child: TypingIndicator(
                             textColor: accent,
+                            text: strings.typing,
                           ),
                         )
-                      : const SizedBox.shrink(key: ValueKey('typing_indicator_empty')),
+                      : const SizedBox.shrink(
+                          key: ValueKey('typing_indicator_empty'),
+                        ),
                 ),
                 ChatBottomInputBar(
                   onEasterEggTriggered: (code) {
@@ -772,9 +978,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                       });
                     } else if (code == 'moze') {
                       _triggerEasterEgg();
-                      context.read<ChatProvider>().sendBotMessage(
-                        "Seni seviyorum Zeynep, Allah seni yanımdan ayırmasın ve yolumuzu kolaylaştırsın. İyi ki varsın.",
-                      );
                     }
                   },
                 ),
@@ -813,7 +1016,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         ),
                       ],
                     ),
-                    child: const Icon(Icons.arrow_downward_rounded, color: Colors.black, size: 22),
+                    child: const Icon(
+                      Icons.arrow_downward_rounded,
+                      color: Colors.black,
+                      size: 22,
+                    ),
                   ),
                 ),
               ),

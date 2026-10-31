@@ -8,6 +8,7 @@ import '../services/media_service.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import '../services/e2ee_service.dart';
 import '../services/preferences_service.dart';
+import '../utils/app_strings.dart';
 
 class ChatRepository {
   final FirebaseAuth _auth = FirebaseAuth.instance;
@@ -222,8 +223,9 @@ class ChatRepository {
   }
 
   Future<void> joinOrCreateRoom(String roomCode) async {
+    final strings = AppStrings(await PreferencesService.getLanguage());
     final uid = currentUserId;
-    if (uid == null) throw Exception("Kullanıcı giriş yapmamış.");
+    if (uid == null) throw Exception(strings.notLoggedIn);
 
     final roomId = CryptoService.deriveRoomId(roomCode);
     final roomRef = _firestore.collection('rooms').doc(roomId);
@@ -242,7 +244,7 @@ class ChatRepository {
         'presence': {uid: true},
         'createdAt': FieldValue.serverTimestamp(),
         'lastMessageTime': FieldValue.serverTimestamp(),
-        'lastMessage': 'Oda oluşturuldu',
+        'lastMessage': strings.roomCreatedPreview,
       };
       if (token != null) data['fcmTokens'] = {uid: token};
       await roomRef.set(data);
@@ -250,7 +252,7 @@ class ChatRepository {
       final List<dynamic> members = snapshot.data()?['members'] ?? [];
       if (!members.contains(uid)) {
         if (members.length >= 2) {
-          throw Exception("Oda kapasitesi dolu (Maks 2 kişi).");
+          throw Exception(strings.roomFullError);
         }
       }
 
@@ -427,7 +429,8 @@ class ChatRepository {
             }
 
             if (isDeleted) {
-              text = "🚫 This message was deleted.";
+              final lang = await PreferencesService.getLanguage();
+              text = AppStrings(lang).messageDeletedText;
               type = 'text';
               mediaUrl = null;
               mediaList = null;
@@ -500,12 +503,13 @@ class ChatRepository {
       };
     }).toList();
 
+    final strings = AppStrings(await PreferencesService.getLanguage());
     final decryptedPayloads = await CryptoService.decryptMessageBatchAsync(cipherList, key);
 
     final buffer = StringBuffer();
-    buffer.writeln("=== MOZECHAT HISTORY EXPORT ===");
-    buffer.writeln("Room Code: $roomCode");
-    buffer.writeln("Export Date: ${DateTime.now().toString().split('.')[0]}");
+    buffer.writeln(strings.exportHeaderTitle);
+    buffer.writeln("${strings.exportRoomCodeLabel}: $roomCode");
+    buffer.writeln("${strings.exportDateLabel}: ${DateTime.now().toString().split('.')[0]}");
     buffer.writeln("================================\n");
 
     for (int i = 0; i < snapshot.docs.length; i++) {
@@ -524,8 +528,8 @@ class ChatRepository {
       final timestamp = (data['timestamp'] as Timestamp?)?.toDate() ?? DateTime.now();
       final dateStr = "${timestamp.day.toString().padLeft(2, '0')}-${timestamp.month.toString().padLeft(2, '0')}-${timestamp.year} ${timestamp.hour.toString().padLeft(2, '0')}:${timestamp.minute.toString().padLeft(2, '0')}";
 
-      String text = "[Encrypted Message]";
-      String nickname = "Unknown";
+      String text = strings.encryptedMessageFallback;
+      String nickname = strings.unknownUser;
       String type = 'text';
 
       final decryptedPayload = decryptedPayloads[i];
@@ -533,19 +537,19 @@ class ChatRepository {
         try {
           final Map<String, dynamic> payloadMap = jsonDecode(decryptedPayload);
           text = payloadMap['text'] ?? '';
-          nickname = payloadMap['nickname'] ?? 'Unknown';
+          nickname = payloadMap['nickname'] ?? strings.unknownUser;
           type = payloadMap['type'] ?? 'text';
           
-          if (type == 'image') text = '[Resim Gönderildi]';
-          if (type == 'video') text = '[Video Gönderildi]';
-          if (type == 'audio') text = '[Sesli Mesaj]';
-          if (type == 'media_group') text = '[Çoklu Medya Gönderildi]';
-          if (type == 'location') text = '[Konum Gönderildi: ${payloadMap['locationName']}]';
+          if (type == 'image') text = strings.photoPreview;
+          if (type == 'video') text = strings.videoPreview;
+          if (type == 'audio') text = strings.voiceMsgPreview;
+          if (type == 'media_group') text = strings.mediaAlbumPreview;
+          if (type == 'location') text = '${strings.locationPreview}: ${payloadMap['locationName']}';
         } catch (e) {
           text = decryptedPayload;
         }
       } else if (decryptedPayload == "[Şifre Çözülemedi]") {
-        text = decryptedPayload!;
+        text = strings.decryptionFailedText;
       }
 
       buffer.writeln("[$dateStr] $nickname: $text");
@@ -581,8 +585,9 @@ class ChatRepository {
       } catch (_) {}
     }
 
+    final strings = AppStrings(await PreferencesService.getLanguage());
     final newPayloadMap = {
-      'text': 'Bu mesaj silindi',
+      'text': strings.messageDeletedText,
       'nickname': nickname,
       'type': 'deleted',
     };
@@ -659,8 +664,9 @@ class ChatRepository {
           } catch (_) {}
         }
 
+        final strings = AppStrings(await PreferencesService.getLanguage());
         final newPayloadMap = {
-          'text': 'Bu mesaj silindi',
+          'text': strings.messageDeletedText,
           'nickname': nickname,
           'type': 'deleted',
         };
@@ -773,9 +779,10 @@ class ChatRepository {
         } catch (_) {}
       }
 
+      final strings = AppStrings(await PreferencesService.getLanguage());
       final newPayloadMap = {
-        'text': 'Bu mesaj silindi',
-        'nickname': 'System',
+        'text': strings.messageDeletedText,
+        'nickname': strings.systemSenderName,
         'type': 'deleted',
       };
       final encryptedMsg = CryptoService.encryptMessage(

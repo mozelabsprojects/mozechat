@@ -18,6 +18,8 @@ import 'services/preferences_service.dart';
 import 'services/e2ee_service.dart';
 import 'services/notification_service.dart';
 import 'repositories/chat_repository.dart';
+import 'repositories/call_repository.dart';
+import 'utils/app_strings.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:screen_protector/screen_protector.dart';
@@ -33,10 +35,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
   }
 
+  final lang = await PreferencesService.getLanguage();
+  final strings = AppStrings(lang);
+
   if (message.data['type'] == 'NEW_MESSAGE') {
-    final roomId = message.data['roomId'];
-    final cipherText = message.data['cipherText'];
-    final iv = message.data['iv'];
+    final roomId = message.data['roomId'] as String?;
+    final cipherText = message.data['cipherText'] as String?;
+    final iv = message.data['iv'] as String?;
+
+    // Suppress immediately if user is currently viewing this room in ChatScreen
+    if (NotificationService.shouldSuppressNotification(roomId: roomId)) {
+      return;
+    }
 
     final history = await PreferencesService.getRoomHistory();
     String? matchedCode;
@@ -47,17 +57,30 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       }
     }
 
+    if (matchedCode != null &&
+        NotificationService.shouldSuppressNotification(
+          roomCode: matchedCode,
+          roomId: roomId,
+        )) {
+      return;
+    }
+
     if (matchedCode != null && cipherText != null && iv != null) {
       var uid = FirebaseAuth.instance.currentUser?.uid;
       if (uid == null) {
-        await FirebaseAuth.instance.authStateChanges().first;
-        uid = FirebaseAuth.instance.currentUser?.uid;
+        try {
+          await FirebaseAuth.instance.authStateChanges().first;
+          uid = FirebaseAuth.instance.currentUser?.uid;
+        } catch (_) {}
       }
       var key = CryptoService.deriveEncryptionKey(matchedCode);
 
-      if (uid != null) {
+      if (uid != null && roomId != null) {
         try {
-          final roomDoc = await FirebaseFirestore.instance.collection('rooms').doc(roomId).get();
+          final roomDoc = await FirebaseFirestore.instance
+              .collection('rooms')
+              .doc(roomId)
+              .get();
           if (roomDoc.exists) {
             final data = roomDoc.data()!;
             final encryptedKeys = data['encryptedKeys'] as Map<String, dynamic>?;
@@ -79,15 +102,22 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       final decryptedStr = CryptoService.decryptMessage(cipherText, iv, key);
       try {
         final payload = jsonDecode(decryptedStr);
-        final text = payload['text'];
-        final nickname = payload['nickname'];
+        final senderId = payload['senderId'] as String?;
+        if (uid != null && senderId != null && senderId == uid) {
+          return;
+        }
+
+        final text = (payload['text'] as String?) ?? '';
+        final nickname = (payload['nickname'] as String?) ?? strings.unknownUser;
 
         await NotificationService.initialize();
 
-        // Sadece kullanıcı o odada aktif DEĞİLse bildirim göster
-        if (NotificationService.currentActiveRoomCode != matchedCode) {
+        if (!NotificationService.shouldSuppressNotification(
+          roomCode: matchedCode,
+          roomId: roomId,
+        )) {
           await NotificationService.showMessageNotification(
-            title: 'Yeni Mesaj: $nickname',
+            title: strings.newMessageFrom(nickname),
             body: text,
             payload: matchedCode,
           );
@@ -95,29 +125,57 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       } catch (e) {
         debugPrint('Background decryption failed: $e');
         await NotificationService.initialize();
-        if (NotificationService.currentActiveRoomCode != matchedCode) {
+        if (!NotificationService.shouldSuppressNotification(
+          roomCode: matchedCode,
+          roomId: roomId,
+        )) {
           await NotificationService.showMessageNotification(
-            title: 'Yeni Mesaj',
-            body: 'E2E şifreli yeni bir mesajınız var.',
+            title: strings.newMessageTitle,
+            body: strings.newEncryptedMessageBody,
             payload: matchedCode,
           );
         }
       }
     }
   } else if (message.data['type'] == 'NEW_CALL') {
-    final roomId = message.data['roomCode'] ?? message.data['roomId'];
-    final callerName = message.data['callerName'];
-    final callId = message.data['callId'];
-    final offerStr = message.data['offer'];
+    final roomId = (message.data['roomCode'] ?? message.data['roomId']) as String?;
+    final callerName = message.data['callerName'] as String?;
+    final callerId = message.data['callerId'] as String?;
+    final callId = message.data['callId'] as String?;
+    final offerStr = message.data['offer'] as String?;
+
+    final currentUid = FirebaseAuth.instance.currentUser?.uid;
+    if (currentUid != null && callerId != null && callerId == currentUid) {
+      return;
+    }
 
     if (roomId != null && callId != null && offerStr != null) {
       try {
+        // Verify the call is still actively ringing before showing CallKit
+        final resolvedId = CallRepository().resolveRoomId(roomId);
+        final callSnap = await FirebaseFirestore.instance
+            .collection('rooms')
+            .doc(resolvedId)
+            .collection('calls')
+            .doc(callId)
+            .get();
+        if (callSnap.exists) {
+          final status = callSnap.data()?['status'] as String?;
+          if (status != null && status != 'ringing') {
+            return;
+          }
+          final docCallerId = callSnap.data()?['callerId'] as String?;
+          if (currentUid != null && docCallerId == currentUid) {
+            return;
+          }
+        }
+
         final offer = jsonDecode(offerStr);
         await CallkitService().showCallkitIncoming(
-          callerName: callerName ?? 'Unknown',
+          callerName: callerName ?? strings.unknownUser,
           roomId: roomId,
           callId: callId,
-          offer: offer,
+          offer: Map<String, dynamic>.from(offer),
         );
       } catch (e) {
         debugPrint('Callkit show error: $e');
@@ -128,7 +186,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  
+
   try {
     await ScreenProtector.preventScreenshotOn();
   } catch (e) {
@@ -146,35 +204,37 @@ void main() async {
 
     FirebaseMessaging.onBackgroundMessage(_firebaseMessagingBackgroundHandler);
 
-    // Bildirim izni iste (Android 13+ ve iOS için zorunlu)
     await FirebaseMessaging.instance.requestPermission(
       alert: true,
       badge: true,
       sound: true,
     );
 
-    // Foreground message dinleyici
+    // Disable automatic OS foreground banner so NotificationService can enforce WhatsApp-style active-room suppression
+    await FirebaseMessaging.instance.setForegroundNotificationPresentationOptions(
+      alert: false,
+      badge: false,
+      sound: false,
+    );
+
     FirebaseMessaging.onMessage.listen((RemoteMessage message) {
       _firebaseMessagingBackgroundHandler(message);
     });
 
-    // FCM token yenilendiğinde tüm odalardaki token'ı güncelle
     FirebaseMessaging.instance.onTokenRefresh.listen((newToken) async {
-      debugPrint('🔄 FCM Token yenilendi: $newToken');
+      debugPrint('🔄 FCM Token refreshed: $newToken');
       final repo = ChatRepository();
       await repo.updateFcmTokenForAllRooms(newToken);
     });
 
-    // Uygulama başlangıcında mevcut FCM token'ı tüm odalara kaydet
     try {
       final currentToken = await FirebaseMessaging.instance.getToken();
       if (currentToken != null) {
-        debugPrint('📱 FCM Token: $currentToken');
         final repo = ChatRepository();
         await repo.updateFcmTokenForAllRooms(currentToken);
       }
     } catch (e) {
-      debugPrint('FCM token alma hatası: $e');
+      debugPrint('FCM token fetch warning: $e');
     }
 
     FirebaseFirestore.instance.settings = const Settings(
@@ -182,22 +242,20 @@ void main() async {
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
 
-    debugPrint("🚀 Firebase başarıyla başlatıldı!");
-
-    // Auto-login logic
     final nickname = await PreferencesService.getNickname();
     final lastActiveRoom = await PreferencesService.getLastActiveRoom();
     if (nickname != null && lastActiveRoom != null) {
       initialRoom = lastActiveRoom;
     }
 
-    // Cold-start notification launch check
     final launchPayload = await NotificationService.getInitialNotificationPayload();
-    if (launchPayload != null && launchPayload.isNotEmpty) {
+    if (launchPayload != null &&
+        launchPayload.isNotEmpty &&
+        launchPayload != 'app_update') {
       initialRoom = launchPayload;
     }
   } catch (e) {
-    debugPrint("❌ Firebase başlatma hatası: $e");
+    debugPrint('❌ Firebase initialization error: $e');
   }
 
   runApp(
@@ -242,7 +300,6 @@ class _MozechatAppState extends State<MozechatApp> {
   }
 
   Future<void> _handleInitialRoute() async {
-    // Uygulama açılışında temel izinleri iste
     await [
       Permission.microphone,
       Permission.camera,
@@ -252,7 +309,6 @@ class _MozechatAppState extends State<MozechatApp> {
 
     if (!mounted) return;
 
-    // Mevcut anonim oturumu kontrol et
     final currentUser = FirebaseAuth.instance.currentUser;
     final nickname = await PreferencesService.getNickname();
 
@@ -260,7 +316,6 @@ class _MozechatAppState extends State<MozechatApp> {
       if (!mounted) return;
       context.read<ChatProvider>().setNickname(nickname);
 
-      // FCM Token update after auth state is confirmed
       try {
         final currentToken = await FirebaseMessaging.instance.getToken();
         if (currentToken != null) {
@@ -291,7 +346,6 @@ class _MozechatAppState extends State<MozechatApp> {
         _homeScreen = const RoomsListScreen();
       }
     }
-    // Diğer durumda _homeScreen zaten LoginScreen olarak kalır
 
     if (mounted) {
       setState(() {

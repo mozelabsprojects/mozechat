@@ -5,6 +5,7 @@ import 'package:provider/provider.dart';
 import '../models/message.dart';
 import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import '../utils/color_utils.dart';
 import 'message_bubble.dart';
 import 'date_divider.dart';
@@ -30,11 +31,12 @@ class ChatMessageItem extends StatelessWidget {
 
   String? _getReplyText(BuildContext context, String replyId) {
     final messages = context.read<ChatProvider>().messages;
+    final strings = context.read<LocaleProvider>().strings;
     try {
       final replyMsg = messages.firstWhere((m) => m.id == replyId);
-      return "${replyMsg.nickname}: ${replyMsg.text}";
+      return '${replyMsg.nickname}: ${replyMsg.text}';
     } catch (_) {
-      return "Deleted or unavailable message";
+      return strings.deletedOrUnavailableMessage;
     }
   }
 
@@ -42,7 +44,7 @@ class ChatMessageItem extends StatelessWidget {
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
     final themeProvider = context.watch<ThemeProvider>();
-    
+
     final isBot = msg.senderId == 'system_bot';
     final isMe = !isBot && msg.senderId == chatProvider.currentUserId;
 

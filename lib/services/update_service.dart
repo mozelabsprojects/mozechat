@@ -5,8 +5,12 @@ import 'package:package_info_plus/package_info_plus.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:open_filex/open_filex.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../providers/locale_provider.dart';
+import '../utils/app_strings.dart';
 import 'notification_service.dart';
+import 'preferences_service.dart';
 
 class UpdateInfo {
   final String latestVersion;
@@ -33,9 +37,11 @@ class UpdateService {
   factory UpdateService() => _instance;
   UpdateService._internal();
 
-  static const String _githubRepo = "mozelabsprojects/mozechat";
-  static const String _releasesApiUrl = "https://api.github.com/repos/$_githubRepo/releases/latest";
-  static const String _rawVersionUrl = "https://raw.githubusercontent.com/$_githubRepo/main/version.json";
+  static const String _githubRepo = 'mozelabsprojects/mozechat';
+  static const String _releasesApiUrl =
+      'https://api.github.com/repos/$_githubRepo/releases/latest';
+  static const String _rawVersionUrl =
+      'https://raw.githubusercontent.com/$_githubRepo/main/version.json';
 
   final Dio _dio = Dio(BaseOptions(
     connectTimeout: const Duration(seconds: 10),
@@ -48,8 +54,12 @@ class UpdateService {
   bool get isChecking => _isChecking;
   bool get isDownloading => _isDownloading;
 
-  /// Semver & Build Number karşılaştırıcısı (Örn: "0.1.1" > "0.1.0" veya 2 > 1)
-  static bool isNewerVersion(String latest, String current, {int? latestCode, int? currentCode}) {
+  static bool isNewerVersion(
+    String latest,
+    String current, {
+    int? latestCode,
+    int? currentCode,
+  }) {
     if (latestCode != null && currentCode != null && latestCode > currentCode) {
       return true;
     }
@@ -57,11 +67,23 @@ class UpdateService {
       final cleanLatest = latest.replaceAll(RegExp(r'^[vV]'), '').trim();
       final cleanCurrent = current.replaceAll(RegExp(r'^[vV]'), '').trim();
 
-      final lBuild = cleanLatest.contains('+') ? int.tryParse(cleanLatest.split('+')[1]) ?? 0 : 0;
-      final cBuild = cleanCurrent.contains('+') ? int.tryParse(cleanCurrent.split('+')[1]) ?? 0 : 0;
+      final lBuild = cleanLatest.contains('+')
+          ? int.tryParse(cleanLatest.split('+')[1]) ?? 0
+          : 0;
+      final cBuild = cleanCurrent.contains('+')
+          ? int.tryParse(cleanCurrent.split('+')[1]) ?? 0
+          : 0;
 
-      final lParts = cleanLatest.split('+')[0].split('.').map((e) => int.tryParse(e) ?? 0).toList();
-      final cParts = cleanCurrent.split('+')[0].split('.').map((e) => int.tryParse(e) ?? 0).toList();
+      final lParts = cleanLatest
+          .split('+')[0]
+          .split('.')
+          .map((e) => int.tryParse(e) ?? 0)
+          .toList();
+      final cParts = cleanCurrent
+          .split('+')[0]
+          .split('.')
+          .map((e) => int.tryParse(e) ?? 0)
+          .toList();
 
       for (int i = 0; i < 3; i++) {
         final l = i < lParts.length ? lParts[i] : 0;
@@ -75,22 +97,26 @@ class UpdateService {
     }
   }
 
-  /// GitHub veya raw version.json üzerinden güncellemeleri denetler
-  Future<UpdateInfo?> checkForUpdate({bool showToastIfUpToDate = false, BuildContext? context}) async {
+  Future<UpdateInfo?> checkForUpdate({
+    bool showToastIfUpToDate = false,
+    BuildContext? context,
+  }) async {
     if (_isChecking) return null;
     _isChecking = true;
 
     try {
+      final lang = await PreferencesService.getLanguage();
+      final strings = AppStrings(lang);
+
       final packageInfo = await PackageInfo.fromPlatform();
       final currentVersion = packageInfo.version;
 
       String latestVersion = currentVersion;
       int? latestVersionCode;
-      String changelog = "Küçük performans iyileştirmeleri ve hata düzeltmeleri.";
-      String downloadUrl = "https://github.com/$_githubRepo/releases/latest";
+      String changelog = strings.defaultChangelog;
+      String downloadUrl = 'https://github.com/$_githubRepo/releases/latest';
       bool forceUpdate = false;
 
-      // 1. Önce GitHub Releases API'yi dene
       bool fetchedFromGithub = false;
       try {
         final response = await _dio.get(
@@ -100,7 +126,8 @@ class UpdateService {
 
         if (response.statusCode == 200 && response.data != null) {
           final data = response.data as Map<String, dynamic>;
-          final tagName = (data['tag_name'] as String? ?? '').replaceAll(RegExp(r'^[vV]'), '');
+          final tagName =
+              (data['tag_name'] as String? ?? '').replaceAll(RegExp(r'^[vV]'), '');
           if (tagName.isNotEmpty) {
             latestVersion = tagName;
             changelog = data['body'] as String? ?? changelog;
@@ -117,10 +144,9 @@ class UpdateService {
           }
         }
       } catch (e) {
-        debugPrint("GitHub Releases API check error (falling back to version.json): $e");
+        debugPrint('GitHub Releases API check error (falling back to version.json): $e');
       }
 
-      // 2. Eğer GitHub Release henüz yayınlanmadıysa raw version.json'ı dene
       if (!fetchedFromGithub) {
         try {
           final response = await _dio.get(
@@ -129,7 +155,9 @@ class UpdateService {
           );
 
           if (response.statusCode == 200 && response.data != null) {
-            final data = response.data is Map ? response.data : Map<String, dynamic>.from(response.data);
+            final data = response.data is Map
+                ? response.data
+                : Map<String, dynamic>.from(response.data);
             latestVersion = data['version'] as String? ?? currentVersion;
             latestVersionCode = data['versionCode'] as int?;
             changelog = data['changelog'] as String? ?? changelog;
@@ -137,7 +165,7 @@ class UpdateService {
             forceUpdate = data['forceUpdate'] as bool? ?? false;
           }
         } catch (e) {
-          debugPrint("Raw version.json check error: $e");
+          debugPrint('Raw version.json check error: $e');
         }
       }
 
@@ -160,11 +188,10 @@ class UpdateService {
       );
 
       if (hasUpdate) {
-        // Sistem bildirimi gönder
         NotificationService.showMessageNotification(
-          title: "🚀 Yeni Mozechat Güncellemesi! (v$latestVersion)",
-          body: "Yeni sürüm hazır. Uygulama içinden doğrudan yükleyebilirsiniz.",
-          payload: "app_update",
+          title: strings.updateNotificationTitle(latestVersion),
+          body: strings.updateNotificationBody,
+          payload: 'app_update',
         );
 
         if (context != null && context.mounted) {
@@ -173,7 +200,7 @@ class UpdateService {
       } else if (showToastIfUpToDate && context != null && context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text("Sistem güncel: Mozechat v$currentVersion"),
+            content: Text(strings.systemUpToDate(currentVersion)),
             backgroundColor: const Color(0xFF159D87),
           ),
         );
@@ -181,14 +208,13 @@ class UpdateService {
 
       return info;
     } catch (e) {
-      debugPrint("Update check general error: $e");
+      debugPrint('Update check general error: $e');
       return null;
     } finally {
       _isChecking = false;
     }
   }
 
-  /// APK dosyasını indirir ve Android yerel paket yükleyicisini açar
   Future<void> downloadAndInstallApk(
     BuildContext context,
     String downloadUrl, {
@@ -200,7 +226,6 @@ class UpdateService {
 
     try {
       if (Platform.isAndroid) {
-        // Android 8+ için bilinmeyen kaynaklardan yükleme izni kontrolü
         final installPermission = await Permission.requestInstallPackages.status;
         if (!installPermission.isGranted) {
           await Permission.requestInstallPackages.request();
@@ -208,7 +233,7 @@ class UpdateService {
       }
 
       final tempDir = await getTemporaryDirectory();
-      final apkPath = "${tempDir.path}/mozechat_update.apk";
+      final apkPath = '${tempDir.path}/mozechat_update.apk';
       final apkFile = File(apkPath);
       if (await apkFile.exists()) {
         await apkFile.delete();
@@ -223,26 +248,24 @@ class UpdateService {
           if (total > 0) {
             final progress = received / total;
             final elapsed = stopwatch.elapsed.inSeconds;
-            String eta = "";
+            String eta = '';
             if (elapsed > 0 && received > 0) {
               final bytesPerSec = received / elapsed;
               final remainingSec = ((total - received) / bytesPerSec).round();
-              eta = "${remainingSec}s";
+              eta = '${remainingSec}s';
             }
             onProgress(progress, eta);
           }
         },
       );
 
-      // İndirme bitti -> Kurulumu tetikle
       if (Platform.isAndroid) {
         final result = await OpenFilex.open(
           apkPath,
-          type: "application/vnd.android.package-archive",
+          type: 'application/vnd.android.package-archive',
         );
-        debugPrint("OpenFilex install result: ${result.message}");
+        debugPrint('OpenFilex install result: ${result.message}');
         if (result.type != ResultType.done) {
-          // Fallback olarak tarayıcıdan indirmeyi aç
           final uri = Uri.parse(downloadUrl);
           if (await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -255,9 +278,8 @@ class UpdateService {
         }
       }
     } catch (e) {
-      debugPrint("APK download error: $e");
+      debugPrint('APK download error: $e');
       onError(e.toString());
-      // Fallback
       final uri = Uri.parse(downloadUrl);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
@@ -267,7 +289,6 @@ class UpdateService {
     }
   }
 
-  /// Uygulama açılışında arka planda güncelleme kontrolü başlatır
   void checkUpdateOnStartup(BuildContext context) {
     Future.delayed(const Duration(seconds: 4), () {
       if (context.mounted) {
@@ -276,7 +297,6 @@ class UpdateService {
     });
   }
 
-  /// Cyberpunk stilli Güncelleme Dialog'u
   void showUpdateDialog(BuildContext context, UpdateInfo info) {
     showDialog(
       context: context,
@@ -299,10 +319,10 @@ class _UpdateDialogWidget extends StatefulWidget {
 class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
   bool _downloading = false;
   double _progress = 0.0;
-  String _eta = "";
+  String _eta = '';
   String? _errorMessage;
 
-  void _startDownload() {
+  void _startDownload(AppStrings strings) {
     setState(() {
       _downloading = true;
       _errorMessage = null;
@@ -323,7 +343,7 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
         if (mounted) {
           setState(() {
             _downloading = false;
-            _errorMessage = "İndirme başarısız oldu. Lütfen internet bağlantınızı kontrol edin.";
+            _errorMessage = strings.downloadFailedCheckNet;
           });
         }
       },
@@ -332,6 +352,7 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     const accentColor = Color(0xFF159D87);
 
     return AlertDialog(
@@ -346,7 +367,7 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
           const SizedBox(width: 10),
           Expanded(
             child: Text(
-              'GÜNCELLEME MEVCUT',
+              strings.updateAvailableTitle,
               style: const TextStyle(
                 color: accentColor,
                 fontWeight: FontWeight.bold,
@@ -365,22 +386,30 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
             Row(
               children: [
                 Text(
-                  "Mevcut: v${widget.info.currentVersion}",
+                  '${strings.currentVersionLabel}: v${widget.info.currentVersion}',
                   style: TextStyle(color: Colors.white.withValues(alpha: 0.5), fontSize: 12),
                 ),
                 const SizedBox(width: 8),
                 const Icon(Icons.arrow_forward, color: accentColor, size: 14),
                 const SizedBox(width: 8),
                 Text(
-                  "Yeni: v${widget.info.latestVersion}",
-                  style: const TextStyle(color: accentColor, fontWeight: FontWeight.bold, fontSize: 13),
+                  '${strings.newVersionLabel}: v${widget.info.latestVersion}',
+                  style: const TextStyle(
+                    color: accentColor,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 13,
+                  ),
                 ),
               ],
             ),
             const SizedBox(height: 14),
             Text(
-              "Sürüm Notları:",
-              style: TextStyle(color: Colors.white.withValues(alpha: 0.8), fontSize: 12, fontWeight: FontWeight.bold),
+              strings.releaseNotesLabel,
+              style: TextStyle(
+                color: Colors.white.withValues(alpha: 0.8),
+                fontSize: 12,
+                fontWeight: FontWeight.bold,
+              ),
             ),
             const SizedBox(height: 6),
             Container(
@@ -392,7 +421,11 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
               ),
               child: Text(
                 widget.info.changelog,
-                style: TextStyle(color: Colors.white.withValues(alpha: 0.9), fontSize: 12, height: 1.4),
+                style: TextStyle(
+                  color: Colors.white.withValues(alpha: 0.9),
+                  fontSize: 12,
+                  height: 1.4,
+                ),
               ),
             ),
             if (_errorMessage != null) ...[
@@ -415,13 +448,20 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    "%${(_progress * 100).toStringAsFixed(0)} İndiriliyor...",
-                    style: const TextStyle(color: accentColor, fontSize: 11, fontWeight: FontWeight.bold),
+                    strings.downloadingPercentage((_progress * 100).toStringAsFixed(0)),
+                    style: const TextStyle(
+                      color: accentColor,
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
                   if (_eta.isNotEmpty)
                     Text(
-                      "Kalan: $_eta",
-                      style: TextStyle(color: Colors.white.withValues(alpha: 0.6), fontSize: 11),
+                      strings.remainingEta(_eta),
+                      style: TextStyle(
+                        color: Colors.white.withValues(alpha: 0.6),
+                        fontSize: 11,
+                      ),
                     ),
                 ],
               ),
@@ -434,7 +474,7 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
           TextButton(
             onPressed: () => Navigator.pop(context),
             child: Text(
-              'DAHA SONRA',
+              strings.laterBtn,
               style: TextStyle(color: Colors.white.withValues(alpha: 0.5)),
             ),
           ),
@@ -445,9 +485,9 @@ class _UpdateDialogWidgetState extends State<_UpdateDialogWidget> {
             side: const BorderSide(color: accentColor),
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
           ),
-          onPressed: _downloading ? null : _startDownload,
+          onPressed: _downloading ? null : () => _startDownload(strings),
           child: Text(
-            _downloading ? 'İNDİRİLİYOR...' : 'ŞİMDİ GÜNCELLE',
+            _downloading ? strings.downloadingBtn : strings.updateNowBtn,
             style: const TextStyle(fontWeight: FontWeight.bold),
           ),
         ),

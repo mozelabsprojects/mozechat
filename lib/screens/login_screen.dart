@@ -21,9 +21,9 @@ class _LoginScreenState extends State<LoginScreen>
     with SingleTickerProviderStateMixin {
   final TextEditingController _nicknameController = TextEditingController();
   final TextEditingController _seedController = TextEditingController();
-  
+
   bool _isRestoreMode = false;
-  
+
   late AnimationController _pulseController;
   late Animation<double> _pulseAnim;
 
@@ -41,13 +41,14 @@ class _LoginScreenState extends State<LoginScreen>
 
   void _loginOrRestore() async {
     final chatProvider = context.read<ChatProvider>();
-    
+    final strings = context.read<LocaleProvider>().strings;
+
     if (!_isRestoreMode) {
       final nickname = _nicknameController.text.trim();
       if (nickname.isEmpty) return;
 
       chatProvider.setNickname(nickname);
-      
+
       final seedPhrase = CryptoService.generateSeedPhrase();
       await chatProvider.initializeSession(seedPhrase);
 
@@ -56,7 +57,7 @@ class _LoginScreenState extends State<LoginScreen>
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(chatProvider.errorMessage ?? "Initialization failed"),
+            content: Text(chatProvider.errorMessage ?? strings.initFailed),
             backgroundColor: Colors.red.shade900,
           ),
         );
@@ -69,7 +70,7 @@ class _LoginScreenState extends State<LoginScreen>
       if (nickname.isEmpty) return;
 
       chatProvider.setNickname(nickname);
-      
+
       await chatProvider.restoreIdentity(seedPhrase);
 
       if (chatProvider.errorMessage == null && mounted) {
@@ -80,7 +81,7 @@ class _LoginScreenState extends State<LoginScreen>
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(chatProvider.errorMessage ?? "Restore failed"),
+            content: Text(chatProvider.errorMessage ?? strings.restoreFailed),
             backgroundColor: Colors.red.shade900,
           ),
         );
@@ -94,8 +95,9 @@ class _LoginScreenState extends State<LoginScreen>
       barrierDismissible: false,
       builder: (ctx) {
         final themeProvider = context.watch<ThemeProvider>();
+        final strings = context.watch<LocaleProvider>().strings;
         final accentColor = themeProvider.accentColor;
-        
+
         return AlertDialog(
           backgroundColor: Colors.black.withValues(alpha: 0.95),
           shape: RoundedRectangleBorder(
@@ -106,13 +108,15 @@ class _LoginScreenState extends State<LoginScreen>
             children: [
               Icon(Icons.warning_amber_rounded, color: Colors.orange.shade400),
               const SizedBox(width: 10),
-              Text(
-                'CRITICAL BACKUP',
-                style: TextStyle(
-                  color: Colors.orange.shade400,
-                  fontSize: 16,
-                  letterSpacing: 2,
-                  fontWeight: FontWeight.bold,
+              Expanded(
+                child: Text(
+                  strings.criticalBackup,
+                  style: TextStyle(
+                    color: Colors.orange.shade400,
+                    fontSize: 15,
+                    letterSpacing: 1.5,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ),
             ],
@@ -121,7 +125,7 @@ class _LoginScreenState extends State<LoginScreen>
             mainAxisSize: MainAxisSize.min,
             children: [
               Text(
-                'Save this 12-word seed phrase securely. If you uninstall the app, this is the ONLY way to restore your identity and messages.',
+                strings.criticalBackupDesc,
                 style: TextStyle(color: accentColor.withValues(alpha: 0.8), fontSize: 13),
               ),
               const SizedBox(height: 16),
@@ -154,11 +158,11 @@ class _LoginScreenState extends State<LoginScreen>
                 onPressed: () {
                   Clipboard.setData(ClipboardData(text: seedPhrase));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('Copied to clipboard')),
+                    SnackBar(content: Text(strings.copiedToClipboard)),
                   );
                 },
                 icon: const Icon(Icons.copy, size: 16),
-                label: const Text('COPY TO CLIPBOARD'),
+                label: Text(strings.copyToClipboard),
               ),
             ],
           ),
@@ -172,7 +176,7 @@ class _LoginScreenState extends State<LoginScreen>
                 );
               },
               child: Text(
-                'I HAVE SAVED IT',
+                strings.iHaveSavedIt,
                 style: TextStyle(color: accentColor, fontWeight: FontWeight.bold),
               ),
             ),
@@ -193,19 +197,17 @@ class _LoginScreenState extends State<LoginScreen>
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
+    final strings = context.watch<LocaleProvider>().strings;
     final accentColor = themeProvider.accentColor;
 
     return Scaffold(
       body: Stack(
         children: [
-          // Animated background grid
           Positioned.fill(
             child: CustomPaint(
               painter: _CyberGridPainter(accentColor),
             ),
           ),
-
-          // Glowing accent overlay
           AnimatedBuilder(
             animation: _pulseAnim,
             builder: (context, child) {
@@ -225,8 +227,6 @@ class _LoginScreenState extends State<LoginScreen>
               );
             },
           ),
-
-          // Content
           Center(
             child: SingleChildScrollView(
               padding: const EdgeInsets.all(32.0),
@@ -256,7 +256,6 @@ class _LoginScreenState extends State<LoginScreen>
                       mainAxisSize: MainAxisSize.min,
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        // Language quick switch
                         Consumer<LocaleProvider>(
                           builder: (context, localeProv, _) {
                             return Align(
@@ -294,7 +293,6 @@ class _LoginScreenState extends State<LoginScreen>
                           },
                         ),
                         const SizedBox(height: 8),
-                        // Logo / Header
                         Center(
                           child: AnimatedBuilder(
                             animation: _pulseAnim,
@@ -337,7 +335,7 @@ class _LoginScreenState extends State<LoginScreen>
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          _isRestoreMode ? 'IDENTITY RECOVERY SYSTEM' : 'ANONYMOUS ENCRYPTED RELAY',
+                          _isRestoreMode ? strings.identityRecoverySystem : strings.anonymousEncryptedRelay,
                           textAlign: TextAlign.center,
                           style: TextStyle(
                             fontSize: 10,
@@ -346,75 +344,69 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                         ),
                         const SizedBox(height: 36),
-
-                          // Nickname label
-                          Row(
-                            children: [
-                              Icon(Icons.chevron_right, color: accentColor, size: 16),
-                              const SizedBox(width: 6),
-                              Text(
-                                'AGENT ALIAS',
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 2,
-                                  color: accentColor.withValues(alpha: 0.7),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 8),
-
-                          // Nickname input
-                          TextField(
-                            controller: _nicknameController,
-                            style: TextStyle(
-                              fontSize: 18,
-                              color: accentColor,
-                              letterSpacing: 1,
-                            ),
-                            decoration: InputDecoration(
-                              hintText: 'ghost_rider',
-                              hintStyle: TextStyle(
-                                color: accentColor.withValues(alpha: 0.25),
-                              ),
-                              prefixIcon: Icon(
-                                Icons.person_outline,
-                                color: accentColor.withValues(alpha: 0.5),
-                              ),
-                              filled: true,
-                              fillColor: Colors.black.withValues(alpha: 0.5),
-                              border: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide.none,
-                              ),
-                              focusedBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: accentColor,
-                                  width: 1.5,
-                                ),
-                              ),
-                              enabledBorder: OutlineInputBorder(
-                                borderRadius: BorderRadius.circular(12),
-                                borderSide: BorderSide(
-                                  color: accentColor.withValues(alpha: 0.2),
-                                  width: 1,
-                                ),
+                        Row(
+                          children: [
+                            Icon(Icons.chevron_right, color: accentColor, size: 16),
+                            const SizedBox(width: 6),
+                            Text(
+                              strings.agentAlias,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                letterSpacing: 2,
+                                color: accentColor.withValues(alpha: 0.7),
                               ),
                             ),
-                            onSubmitted: (_) => _loginOrRestore(),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: _nicknameController,
+                          style: TextStyle(
+                            fontSize: 18,
+                            color: accentColor,
+                            letterSpacing: 1,
                           ),
-
+                          decoration: InputDecoration(
+                            hintText: 'ghost_rider',
+                            hintStyle: TextStyle(
+                              color: accentColor.withValues(alpha: 0.25),
+                            ),
+                            prefixIcon: Icon(
+                              Icons.person_outline,
+                              color: accentColor.withValues(alpha: 0.5),
+                            ),
+                            filled: true,
+                            fillColor: Colors.black.withValues(alpha: 0.5),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide.none,
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: accentColor,
+                                width: 1.5,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(
+                                color: accentColor.withValues(alpha: 0.2),
+                                width: 1,
+                              ),
+                            ),
+                          ),
+                          onSubmitted: (_) => _loginOrRestore(),
+                        ),
                         if (_isRestoreMode) ...[
                           const SizedBox(height: 16),
-                          // Seed phrase label
                           Row(
                             children: [
                               Icon(Icons.vpn_key_outlined, color: accentColor, size: 16),
                               const SizedBox(width: 6),
                               Text(
-                                'RECOVERY KEY (12 WORDS)',
+                                strings.recoveryKeyLabel,
                                 style: TextStyle(
                                   fontSize: 11,
                                   fontWeight: FontWeight.bold,
@@ -425,8 +417,6 @@ class _LoginScreenState extends State<LoginScreen>
                             ],
                           ),
                           const SizedBox(height: 8),
-
-                          // Seed phrase input
                           TextField(
                             controller: _seedController,
                             maxLines: 3,
@@ -437,7 +427,7 @@ class _LoginScreenState extends State<LoginScreen>
                               height: 1.5,
                             ),
                             decoration: InputDecoration(
-                              hintText: 'enter your secret twelve word backup phrase here separated by spaces',
+                              hintText: strings.recoveryKeyHint,
                               hintStyle: TextStyle(
                                 color: accentColor.withValues(alpha: 0.25),
                               ),
@@ -464,10 +454,7 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                           ),
                         ],
-                        
                         const SizedBox(height: 28),
-
-                        // Login button
                         context.watch<ChatProvider>().isLoading
                             ? Center(
                                 child: SizedBox(
@@ -505,7 +492,7 @@ class _LoginScreenState extends State<LoginScreen>
                                         ),
                                         child: Center(
                                           child: Text(
-                                            _isRestoreMode ? '[ RESTORE IDENTITY ]' : '[ INITIALIZE NEW NODE ]',
+                                            _isRestoreMode ? strings.restoreIdentityBtn : strings.initNewNode,
                                             style: TextStyle(
                                               fontSize: 15,
                                               fontWeight: FontWeight.bold,
@@ -519,10 +506,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                 ),
                               ),
-
                         const SizedBox(height: 24),
-                        
-                        // Toggle mode
                         Center(
                           child: TextButton(
                             onPressed: () {
@@ -531,7 +515,7 @@ class _LoginScreenState extends State<LoginScreen>
                               });
                             },
                             child: Text(
-                              _isRestoreMode ? 'CANCEL RESTORE' : 'RESTORE EXISTING IDENTITY',
+                              _isRestoreMode ? strings.cancelRestore : strings.restoreExistingIdentity,
                               style: TextStyle(
                                 color: accentColor.withValues(alpha: 0.6),
                                 fontSize: 12,
@@ -541,17 +525,14 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                           ),
                         ),
-                        
                         const SizedBox(height: 12),
-
-                        // Security badge
                         Row(
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
                             Icon(Icons.lock_outline, size: 12, color: accentColor.withValues(alpha: 0.3)),
                             const SizedBox(width: 6),
                             Text(
-                              'E2E ENCRYPTED • ANONYMOUS',
+                              strings.e2eBadge,
                               style: TextStyle(
                                 fontSize: 9,
                                 letterSpacing: 2,
@@ -573,7 +554,6 @@ class _LoginScreenState extends State<LoginScreen>
   }
 }
 
-// Cyber grid background painter
 class _CyberGridPainter extends CustomPainter {
   final Color accentColor;
   _CyberGridPainter(this.accentColor);
@@ -592,7 +572,6 @@ class _CyberGridPainter extends CustomPainter {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), paint);
     }
 
-    // Random dot accents
     final dotPaint = Paint()
       ..color = accentColor.withValues(alpha: 0.12);
     final rng = Random(42);

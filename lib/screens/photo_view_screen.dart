@@ -4,17 +4,19 @@ import 'package:path_provider/path_provider.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 import '../models/message.dart';
+import '../providers/locale_provider.dart';
 
 class PhotoViewScreen extends StatefulWidget {
   final List<Message> imageMessages;
   final int initialIndex;
 
   const PhotoViewScreen({
-    super.key, 
-    required this.imageMessages, 
+    super.key,
+    required this.imageMessages,
     this.initialIndex = 0,
   });
 
@@ -39,6 +41,7 @@ class _PhotoViewScreenState extends State<PhotoViewScreen> {
     final currentImageUrl = widget.imageMessages[currentIndex].mediaUrl;
     if (currentImageUrl == null) return;
 
+    final strings = context.read<LocaleProvider>().strings;
     setState(() => _isDownloading = true);
     try {
       if (!await Gal.hasAccess()) {
@@ -53,12 +56,12 @@ class _PhotoViewScreenState extends State<PhotoViewScreen> {
       await Gal.putImage(path);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
+          SnackBar(
             content: Text(
-              'Saved to Gallery!',
-              style: TextStyle(color: Colors.white),
+              strings.savedToGallery,
+              style: const TextStyle(color: Colors.white),
             ),
-            backgroundColor: Color(0xFF159D87),
+            backgroundColor: const Color(0xFF159D87),
           ),
         );
       }
@@ -67,7 +70,7 @@ class _PhotoViewScreenState extends State<PhotoViewScreen> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Download failed: $e',
+              '${strings.downloadFailedPrefix}: $e',
               style: const TextStyle(color: Colors.white),
             ),
             backgroundColor: Colors.red,
@@ -81,6 +84,7 @@ class _PhotoViewScreenState extends State<PhotoViewScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -112,7 +116,7 @@ class _PhotoViewScreenState extends State<PhotoViewScreen> {
               : IconButton(
                   icon: const Icon(Icons.download, color: Colors.white),
                   onPressed: _downloadImage,
-                  tooltip: 'Save to Gallery',
+                  tooltip: strings.saveToGalleryTooltip,
                 ),
         ],
       ),

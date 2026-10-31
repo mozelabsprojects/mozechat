@@ -18,7 +18,6 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   final List<String> selectedMessages;
   final VoidCallback onClearSelection;
   final VoidCallback onShowSettings;
-  final VoidCallback onShowCommands;
   final VoidCallback onCopyCode;
 
   const ChatAppBar({
@@ -26,7 +25,6 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
     required this.selectedMessages,
     required this.onClearSelection,
     required this.onShowSettings,
-    required this.onShowCommands,
     required this.onCopyCode,
   });
 
@@ -44,6 +42,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
+    final callProvider = context.watch<CallProvider>();
     final strings = context.watch<LocaleProvider>().strings;
     final appBgColor = Theme.of(context).scaffoldBackgroundColor;
     final topBarTextColor = getContrastColor(appBgColor);
@@ -60,7 +59,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
       ),
       title: selectedMessages.isNotEmpty
           ? Text(
-              '${selectedMessages.length} Selected',
+              strings.selectedCount(selectedMessages.length),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
                 color: topBarTextColor,
@@ -89,7 +88,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'E2E SECURED: ${chatProvider.roomCode}',
+                        '${strings.e2eSecured}: ${chatProvider.roomCode}',
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -108,7 +107,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                       : (chatProvider.isOtherOnline
                           ? strings.online
                           : (chatProvider.otherLastSeen != null
-                              ? 'Last seen: ${_formatLastSeen(chatProvider.otherLastSeen!)}'
+                              ? '${strings.lastSeen}: ${_formatLastSeen(chatProvider.otherLastSeen!)}'
                               : strings.offline)),
                   style: TextStyle(
                     fontSize: 12,
@@ -167,7 +166,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     QRDialog.show(
                       context,
                       roomCode: chatProvider.roomCode!,
-                      roomTitle: 'ODA QR KODU',
+                      roomTitle: strings.roomQrCodeTitle,
                     );
                   }
                 },
@@ -178,9 +177,26 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
               BouncyTap(
                 onTap: () async {
-                  final callProvider = context.read<CallProvider>();
+                  if (chatProvider.roomCode == null || chatProvider.currentUserId == null) {
+                    return;
+                  }
+                  if (callProvider.isInCall) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const CallScreen()),
+                    );
+                    return;
+                  }
+                  if (callProvider.hasIncomingRoomCall) {
+                    await callProvider.joinIncomingRoomCall(openCallScreen: true);
+                    return;
+                  }
                   try {
-                    await callProvider.startCall(chatProvider.roomCode!, chatProvider.currentUserId!, chatProvider.nickname ?? 'Arayan Kişi');
+                    await callProvider.startCall(
+                      chatProvider.roomCode!,
+                      chatProvider.currentUserId!,
+                      chatProvider.nickname ?? strings.unknownUser,
+                    );
                     if (context.mounted) {
                       Navigator.push(
                         context,
@@ -193,7 +209,14 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                 },
                 child: Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                  child: Icon(Icons.phone, color: topBarTextColor),
+                  child: Icon(
+                    callProvider.isInCall || callProvider.hasIncomingRoomCall
+                        ? Icons.phone_in_talk_rounded
+                        : Icons.phone,
+                    color: callProvider.isInCall || callProvider.hasIncomingRoomCall
+                        ? const Color(0xFF159D87)
+                        : topBarTextColor,
+                  ),
                 ),
               ),
               PopupMenuButton<String>(
@@ -218,8 +241,6 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     chatProvider.exportChatHistoryAsText();
                   } else if (value == 'settings') {
                     onShowSettings();
-                  } else if (value == 'commands') {
-                    onShowCommands();
                   } else if (value == 'copy') {
                     onCopyCode();
                   }
@@ -257,13 +278,6 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     child: ListTile(
                       leading: const Icon(Icons.settings),
                       title: Text(strings.settingsTitle),
-                    ),
-                  ),
-                  PopupMenuItem(
-                    value: 'commands',
-                    child: ListTile(
-                      leading: const Icon(Icons.menu_book),
-                      title: Text(strings.commands),
                     ),
                   ),
                   PopupMenuItem(

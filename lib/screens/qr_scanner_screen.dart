@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:provider/provider.dart';
 import 'package:mobile_scanner/mobile_scanner.dart';
+import '../providers/locale_provider.dart';
 
 class QRScannerScreen extends StatefulWidget {
   const QRScannerScreen({super.key});
@@ -35,7 +37,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
     _isScanned = true;
     HapticFeedback.mediumImpact();
 
-    // Clean URL or custom scheme if present
     String roomCode = rawValue.trim();
     if (roomCode.contains('code=')) {
       final uri = Uri.tryParse(roomCode);
@@ -49,6 +50,7 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final strings = context.watch<LocaleProvider>().strings;
     const accentColor = Color(0xFF159D87);
 
     return Scaffold(
@@ -59,9 +61,9 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
           icon: const Icon(Icons.close, color: Colors.white),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text(
-          'QR KOD TARA',
-          style: TextStyle(
+        title: Text(
+          strings.qrScannerTitle,
+          style: const TextStyle(
             color: accentColor,
             fontWeight: FontWeight.bold,
             letterSpacing: 2,
@@ -94,8 +96,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
             controller: _controller,
             onDetect: _onDetect,
           ),
-
-          // Dark overlay with transparent center viewfinder
           ColorFiltered(
             colorFilter: ColorFilter.mode(
               Colors.black.withValues(alpha: 0.7),
@@ -123,8 +123,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
               ],
             ),
           ),
-
-          // Neon scanning border & instructions
           Center(
             child: Container(
               width: 264,
@@ -142,8 +140,6 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
               ),
             ),
           ),
-
-          // Subtitle instruction
           Positioned(
             bottom: 60,
             left: 20,
@@ -155,10 +151,10 @@ class _QRScannerScreenState extends State<QRScannerScreen> {
                 borderRadius: BorderRadius.circular(24),
                 border: Border.all(color: accentColor.withValues(alpha: 0.4)),
               ),
-              child: const Text(
-                'Arkadaşınızın Mozechat QR kodunu bu alana hizalayın',
+              child: Text(
+                strings.qrScannerInstruction,
                 textAlign: TextAlign.center,
-                style: TextStyle(
+                style: const TextStyle(
                   color: Colors.white,
                   fontSize: 13,
                   fontWeight: FontWeight.w500,

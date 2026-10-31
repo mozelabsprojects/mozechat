@@ -3,20 +3,22 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
+import '../utils/app_strings.dart';
 
 class DateDivider extends StatelessWidget {
   final DateTime date;
 
   const DateDivider({super.key, required this.date});
 
-  String _getDateDividerText(DateTime date) {
+  String _getDateDividerText(DateTime date, AppStrings strings) {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
     final yesterday = today.subtract(const Duration(days: 1));
     final msgDate = DateTime(date.year, date.month, date.day);
 
-    if (msgDate == today) return "BUGÜN";
-    if (msgDate == yesterday) return "DÜN";
+    if (msgDate == today) return strings.todayLabel;
+    if (msgDate == yesterday) return strings.yesterdayLabel;
 
     final diff = today.difference(msgDate).inDays;
     if (diff < 7) {
@@ -29,6 +31,7 @@ class DateDivider extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final themeProvider = context.watch<ThemeProvider>();
+    final strings = context.watch<LocaleProvider>().strings;
     final accent = themeProvider.accentColor;
 
     return Center(
@@ -67,7 +70,7 @@ class DateDivider extends StatelessWidget {
                   ),
                   const SizedBox(width: 8),
                   Text(
-                    '// ${_getDateDividerText(date)} //',
+                    '// ${_getDateDividerText(date, strings)} //',
                     style: TextStyle(
                       fontSize: 10,
                       fontWeight: FontWeight.bold,

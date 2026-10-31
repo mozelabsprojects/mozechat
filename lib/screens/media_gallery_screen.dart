@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
+import '../providers/locale_provider.dart';
 import 'photo_view_gallery_screen.dart';
 import 'video_player_screen.dart';
 
@@ -27,6 +28,7 @@ class MediaGalleryScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
     final themeProvider = context.watch<ThemeProvider>();
+    final strings = context.watch<LocaleProvider>().strings;
 
     final List<GalleryItem> allMedia = [];
 
@@ -36,14 +38,28 @@ class MediaGalleryScreen extends StatelessWidget {
       if (msg.type == 'image' && msg.mediaUrl != null) {
         allMedia.add(GalleryItem(messageId: msg.id, type: 'image', url: msg.mediaUrl!));
       } else if (msg.type == 'video' && msg.mediaUrl != null) {
-        allMedia.add(GalleryItem(messageId: msg.id, type: 'video', url: msg.mediaUrl!, thumbnailUrl: msg.thumbnailUrl));
+        allMedia.add(
+          GalleryItem(
+            messageId: msg.id,
+            type: 'video',
+            url: msg.mediaUrl!,
+            thumbnailUrl: msg.thumbnailUrl,
+          ),
+        );
       } else if (msg.type == 'media_group' && msg.mediaList != null) {
         for (var item in msg.mediaList!) {
           final type = item['type'] ?? 'image';
           final url = item['url'];
           final thumb = item['thumbnailUrl'];
           if (url != null) {
-            allMedia.add(GalleryItem(messageId: msg.id, type: type, url: url, thumbnailUrl: thumb));
+            allMedia.add(
+              GalleryItem(
+                messageId: msg.id,
+                type: type,
+                url: url,
+                thumbnailUrl: thumb,
+              ),
+            );
           }
         }
       }
@@ -57,9 +73,9 @@ class MediaGalleryScreen extends StatelessWidget {
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
-          title: const Text(
-            'MEDIA GALLERY',
-            style: TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
+          title: Text(
+            strings.mediaGalleryTitle,
+            style: const TextStyle(fontWeight: FontWeight.bold, letterSpacing: 2),
           ),
           backgroundColor: Colors.transparent,
           elevation: 0,
@@ -67,10 +83,10 @@ class MediaGalleryScreen extends StatelessWidget {
             indicatorColor: themeProvider.accentColor,
             labelColor: themeProvider.accentColor,
             unselectedLabelColor: Colors.grey,
-            tabs: const [
-              Tab(text: 'TÜMÜ'),
-              Tab(text: 'FOTOĞRAFLAR'),
-              Tab(text: 'VİDEOLAR'),
+            tabs: [
+              Tab(text: strings.allTab),
+              Tab(text: strings.photosTab),
+              Tab(text: strings.videosTab),
             ],
           ),
         ),
@@ -86,10 +102,11 @@ class MediaGalleryScreen extends StatelessWidget {
   }
 
   Widget _buildGrid(BuildContext context, List<GalleryItem> items, ThemeProvider themeProvider) {
+    final strings = context.watch<LocaleProvider>().strings;
     if (items.isEmpty) {
       return Center(
         child: Text(
-          '> NO_MEDIA_FOUND',
+          strings.noMediaFound,
           style: TextStyle(color: themeProvider.accentColor, fontSize: 18),
         ),
       );
@@ -119,13 +136,15 @@ class MediaGalleryScreen extends StatelessWidget {
             } else {
               final imageItems = items.where((m) => m.type == 'image').toList();
               final initialIndex = imageItems.indexOf(item);
-              
-              final mediaList = imageItems.map((m) => {
-                'type': m.type,
-                'url': m.url,
-                'thumbnailUrl': m.thumbnailUrl
-              }).toList();
-              
+
+              final mediaList = imageItems
+                  .map((m) => {
+                        'type': m.type,
+                        'url': m.url,
+                        'thumbnailUrl': m.thumbnailUrl,
+                      })
+                  .toList();
+
               Navigator.push(
                 context,
                 MaterialPageRoute(
