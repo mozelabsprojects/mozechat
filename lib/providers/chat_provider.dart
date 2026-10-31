@@ -636,7 +636,10 @@ class ChatProvider extends ChangeNotifier {
                     latestMsg.id != _lastMessageId) {
                   _lastMessageId = latestMsg.id;
 
-                  if (!isInitialLoad) {
+                  final lowerMsg = latestMsg.text.toLowerCase();
+                  final isCallEndLog = latestMsg.text.startsWith('📞') &&
+                      (lowerMsg.contains('sonlandırıldı') || lowerMsg.contains('ended'));
+                  if (!isInitialLoad && !isCallEndLog) {
                     _playSound('sounds/gtanotification.mp3');
                   }
                 }

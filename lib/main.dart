@@ -110,40 +110,52 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         final text = (payload['text'] as String?) ?? '';
         final nickname = (payload['nickname'] as String?) ?? strings.unknownUser;
         final lowerText = text.toLowerCase();
-        final isCallStartMsg = text.startsWith('📞') &&
+        final isCallLogMsg = text.startsWith('📞');
+        final isCallStartMsg = isCallLogMsg &&
             !lowerText.contains('sonlandırıldı') &&
             !lowerText.contains('ended');
 
-        await NotificationService.initialize();
-
-        if (isCallStartMsg) {
-          // Also trigger CallKit incoming call if an active ringing call exists in Firestore
-          try {
-            final ringingDoc = await CallRepository().getLatestRingingCall(
-              matchedCode,
-              excludeCallerId: uid,
-            );
-            if (ringingDoc != null && ringingDoc['callId'] != null) {
-              await CallkitService().showCallkitIncoming(
-                callerName: nickname,
-                roomId: matchedCode,
-                callId: ringingDoc['callId'].toString(),
-              );
+        // WhatsApp-style call notification handling:
+        // Never spam a text message notification for '📞' call log entries!
+        if (isCallLogMsg) {
+          if (isCallStartMsg) {
+            // Only show CallKit incoming UI if user is outside this chat room (deduplicated by callId)
+            if (!NotificationService.shouldSuppressNotification(
+              roomCode: matchedCode,
+              roomId: roomId,
+            )) {
+              try {
+                final ringingDoc = await CallRepository().getLatestRingingCall(
+                  matchedCode,
+                  excludeCallerId: uid,
+                );
+                if (ringingDoc != null && ringingDoc['callId'] != null) {
+                  await CallkitService().showCallkitIncoming(
+                    callerName: nickname,
+                    roomId: matchedCode,
+                    callId: ringingDoc['callId'].toString(),
+                  );
+                }
+              } catch (_) {}
             }
-          } catch (_) {}
+          } else {
+            // Call ended log message: dismiss any leftover ringing CallKit UI
+            await CallkitService().endAllCalls();
+            await NotificationService.clearNotificationsForRoom(matchedCode);
+          }
+          return;
         }
+
+        await NotificationService.initialize();
 
         if (!NotificationService.shouldSuppressNotification(
           roomCode: matchedCode,
           roomId: roomId,
         )) {
           await NotificationService.showMessageNotification(
-            title: isCallStartMsg
-                ? '${strings.incomingVoiceCall}: $nickname'
-                : strings.newMessageFrom(nickname),
+            title: strings.newMessageFrom(nickname),
             body: text,
             payload: matchedCode,
-            isCallNotification: isCallStartMsg,
           );
         }
       } catch (e) {
@@ -175,6 +187,15 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     if (roomId != null && callId != null) {
       try {
         final resolvedId = CallRepository().resolveRoomId(roomId);
+
+        // WhatsApp logic: if user is actively viewing this chat screen, the in-chat top banner handles it
+        if (NotificationService.shouldSuppressNotification(
+          roomCode: roomId,
+          roomId: resolvedId,
+        )) {
+          return;
+        }
+
         final callSnap = await FirebaseFirestore.instance
             .collection('rooms')
             .doc(resolvedId)

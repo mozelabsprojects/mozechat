@@ -4,8 +4,10 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import 'package:permission_handler/permission_handler.dart';
+import 'package:provider/provider.dart';
 import '../services/webrtc_service.dart';
 import '../services/callkit_service.dart';
+import '../services/notification_service.dart';
 import '../services/preferences_service.dart';
 import '../services/crypto_service.dart';
 import '../repositories/chat_repository.dart';
@@ -13,6 +15,8 @@ import '../repositories/call_repository.dart';
 import '../utils/app_strings.dart';
 import '../main.dart';
 import '../screens/call_screen.dart';
+import '../screens/chat_screen.dart';
+import 'chat_provider.dart';
 
 class CallProvider extends ChangeNotifier {
   final WebRTCService _webRTCService = WebRTCService();
@@ -20,6 +24,7 @@ class CallProvider extends ChangeNotifier {
   final CallRepository _callRepository = CallRepository();
 
   bool _isInCall = false;
+  bool _isJoiningCall = false;
   bool _isCallConnected = false;
   bool _isMuted = false;
   bool _isSpeaker = false;
@@ -47,15 +52,23 @@ class CallProvider extends ChangeNotifier {
   CallProvider() {
     _webRTCService.onRemoteStreamAdded = (stream) {
       _remoteStream = stream;
+      _isInCall = true;
       _isCallConnected = true;
       _startDurationTimerIfNeeded();
       notifyListeners();
+      if (!_isCaller && !_isCallScreenOpen) {
+        openCallScreenNow();
+      }
     };
 
     _webRTCService.onCallConnected = () {
+      _isInCall = true;
       _isCallConnected = true;
       _startDurationTimerIfNeeded();
       notifyListeners();
+      if (!_isCaller && !_isCallScreenOpen) {
+        openCallScreenNow();
+      }
     };
 
     _webRTCService.onCallEnded = () {
@@ -64,6 +77,26 @@ class CallProvider extends ChangeNotifier {
 
     _callkitService.onCallAccepted = (callId, roomId, offer, callerName) async {
       final resolvedCode = await _resolveRoomCode(roomId);
+      if (resolvedCode.isEmpty) return;
+
+      // Ensure ChatScreen for this room is open underneath CallScreen if user accepted from outside the room
+      final ctx = navigatorKey.currentContext;
+      if (ctx != null &&
+          ctx.mounted &&
+          !NotificationService.shouldSuppressNotification(roomCode: resolvedCode)) {
+        try {
+          final chatProvider = ctx.read<ChatProvider>();
+          if (chatProvider.roomCode != resolvedCode) {
+            unawaited(chatProvider.joinRoom(resolvedCode));
+          }
+          if (!NotificationService.isUserInChatScreen) {
+            navigatorKey.currentState?.push(
+              MaterialPageRoute(builder: (_) => const ChatScreen()),
+            );
+          }
+        } catch (_) {}
+      }
+
       await joinIncomingRoomCall(
         roomCode: resolvedCode,
         callId: callId,
@@ -74,6 +107,9 @@ class CallProvider extends ChangeNotifier {
     };
 
     _callkitService.onCallDeclined = (callId, roomId) async {
+      // Never decline or kill a call that the user has already answered or is currently joining
+      if (_isInCall || _isJoiningCall) return;
+
       final resolvedCode = await _resolveRoomCode(roomId);
       if (resolvedCode.isNotEmpty && callId.isNotEmpty) {
         await _callRepository.endCall(resolvedCode, callId);
@@ -81,20 +117,18 @@ class CallProvider extends ChangeNotifier {
       if (_incomingCallId == callId) {
         _clearIncomingBannerState();
       }
-      if (_isInCall) {
-        await _webRTCService.endCall();
-        _resetCallState();
-      }
     };
 
     _callkitService.onCallEndedBySystem = (callId) async {
-      if (_isInCall) {
-        await endCall();
+      // Do not terminate an active or joining Flutter CallScreen session when CallKit notification dismisses
+      if (_isJoiningCall || _isInCall) {
+        return;
       }
     };
   }
 
   bool get isInCall => _isInCall;
+  bool get isJoiningCall => _isJoiningCall;
   bool get isCallConnected => _isCallConnected || _remoteStream != null;
   bool get isCaller => _isCaller;
   bool get isMuted => _isMuted;
@@ -107,7 +141,7 @@ class CallProvider extends ChangeNotifier {
   int get callDurationSeconds => _callDurationSeconds;
 
   bool get hasIncomingRoomCall =>
-      !_isInCall && _incomingCallId != null && _incomingOffer != null;
+      !_isInCall && !_isJoiningCall && _incomingCallId != null && _incomingOffer != null;
   String? get incomingCallId => _incomingCallId;
   String? get incomingCallerName => _incomingCallerName;
 
@@ -158,7 +192,7 @@ class CallProvider extends ChangeNotifier {
     if (_isCallScreenOpen) return;
 
     void tryPush([int attempt = 0]) {
-      if (!_isInCall && !hasIncomingRoomCall) return;
+      if (!_isInCall && !_isJoiningCall && !hasIncomingRoomCall) return;
       if (_isCallScreenOpen) return;
       final nav = navigatorKey.currentState;
       if (nav != null) {
@@ -166,8 +200,8 @@ class CallProvider extends ChangeNotifier {
         nav.push(MaterialPageRoute(builder: (_) => const CallScreen())).then((_) {
           _isCallScreenOpen = false;
         });
-      } else if (attempt < 15) {
-        Future.delayed(const Duration(milliseconds: 120), () => tryPush(attempt + 1));
+      } else if (attempt < 20) {
+        Future.delayed(const Duration(milliseconds: 100), () => tryPush(attempt + 1));
       }
     }
 
@@ -196,6 +230,7 @@ class CallProvider extends ChangeNotifier {
     _durationTimer?.cancel();
     _durationTimer = null;
     _isInCall = false;
+    _isJoiningCall = false;
     _isCallConnected = false;
     _isMuted = false;
     _isSpeaker = false;
@@ -234,7 +269,7 @@ class CallProvider extends ChangeNotifier {
 
     _roomCallsSubscription = _callRepository.listenToActiveCalls(roomCode).listen(
       (snapshot) {
-        if (_isInCall) {
+        if (_isInCall || _isJoiningCall) {
           if (_incomingCallId != null) {
             _clearIncomingBannerState();
           }
@@ -289,6 +324,11 @@ class CallProvider extends ChangeNotifier {
     final targetRoom = roomCode ?? _watchedRoomCode ?? _currentRoomCode;
     if (targetRoom == null || targetRoom.isEmpty) return;
 
+    if (_isJoiningCall) {
+      if (openCallScreen) openCallScreenNow();
+      return;
+    }
+
     if (_isInCall) {
       if (openCallScreen) openCallScreenNow();
       return;
@@ -299,6 +339,7 @@ class CallProvider extends ChangeNotifier {
     String? targetCallerName = callerName ?? _incomingCallerName;
 
     // Immediately transition state and open CallScreen so tapping feels instant (0ms latency)
+    _isJoiningCall = true;
     _isInCall = true;
     _isCallConnected = false;
     _isCaller = false;
@@ -307,10 +348,6 @@ class CallProvider extends ChangeNotifier {
     _callDurationSeconds = 0;
     _callStartTime = DateTime.now();
     _currentRoomCode = targetRoom;
-    _peerDisplayName = await _resolveDisplayName(
-      targetRoom,
-      preferredName: targetCallerName,
-    );
     _incomingCallId = null;
     _incomingOffer = null;
     _incomingCallerName = null;
@@ -320,8 +357,15 @@ class CallProvider extends ChangeNotifier {
       openCallScreenNow();
     }
 
-    // Dismiss any ringing system CallKit UI
+    // Dismiss any ringing system CallKit UI or local notifications for this room
     unawaited(_callkitService.endAllCalls());
+    unawaited(NotificationService.clearNotificationsForRoom(targetRoom));
+
+    _peerDisplayName = await _resolveDisplayName(
+      targetRoom,
+      preferredName: targetCallerName,
+    );
+    notifyListeners();
 
     await [Permission.microphone, Permission.bluetoothConnect].request();
     _currentUserNickname = await PreferencesService.getNickname() ?? 'Unknown';
@@ -332,10 +376,12 @@ class CallProvider extends ChangeNotifier {
       if (targetCallId != null && targetCallId.isNotEmpty) {
         callDoc = await _callRepository.getCall(targetRoom, targetCallId);
       }
-      callDoc ??= await _callRepository.getLatestRingingCall(
-        targetRoom,
-        excludeCallerId: FirebaseAuth.instance.currentUser?.uid,
-      );
+      if (callDoc == null || callDoc['status'] != 'ringing') {
+        callDoc = await _callRepository.getLatestRingingCall(
+          targetRoom,
+          excludeCallerId: FirebaseAuth.instance.currentUser?.uid,
+        );
+      }
 
       if (callDoc != null && callDoc['offer'] is Map && callDoc['status'] == 'ringing') {
         targetCallId = callDoc['callId']?.toString();
@@ -360,10 +406,16 @@ class CallProvider extends ChangeNotifier {
       return;
     }
 
+    _isJoiningCall = false;
+    _isInCall = true;
     _localStream = _webRTCService.localStream;
     _webRTCService.toggleSpeaker(_isSpeaker);
     _startDurationTimerIfNeeded();
     notifyListeners();
+
+    if (openCallScreen && !_isCallScreenOpen) {
+      openCallScreenNow();
+    }
   }
 
   /// Decline an incoming call directly from the in-chat WhatsApp banner
@@ -372,6 +424,9 @@ class CallProvider extends ChangeNotifier {
     final targetCallId = _incomingCallId;
     _clearIncomingBannerState();
     await _callkitService.endAllCalls();
+    if (targetRoom != null) {
+      await NotificationService.clearNotificationsForRoom(targetRoom);
+    }
     if (targetRoom != null && targetCallId != null) {
       await _callRepository.endCall(targetRoom, targetCallId);
     }
@@ -384,7 +439,7 @@ class CallProvider extends ChangeNotifier {
     String nickname, {
     bool openCallScreen = true,
   }) async {
-    if (_isInCall) {
+    if (_isInCall || _isJoiningCall) {
       if (openCallScreen) openCallScreenNow();
       return;
     }
@@ -405,13 +460,15 @@ class CallProvider extends ChangeNotifier {
     _callStartTime = null;
     _currentRoomCode = roomCode;
     _currentUserNickname = nickname;
-    _peerDisplayName = await _resolveDisplayName(roomCode);
     _clearIncomingBannerState();
     notifyListeners();
 
     if (openCallScreen) {
       openCallScreenNow();
     }
+
+    _peerDisplayName = await _resolveDisplayName(roomCode);
+    notifyListeners();
 
     await [Permission.microphone, Permission.bluetoothConnect].request();
 
@@ -422,18 +479,24 @@ class CallProvider extends ChangeNotifier {
     );
     if (existingRinging != null && existingRinging['offer'] is Map) {
       _isCaller = false;
+      _isJoiningCall = true;
       _callStartTime = DateTime.now();
       final cId = existingRinging['callId'].toString();
       final cOffer = Map<String, dynamic>.from(existingRinging['offer'] as Map);
       final ok = await _webRTCService.joinCall(roomCode, cId, cOffer);
+      _isJoiningCall = false;
       if (!ok) {
         _resetCallState();
         return;
       }
+      _isInCall = true;
       _localStream = _webRTCService.localStream;
       _webRTCService.toggleSpeaker(_isSpeaker);
       _startDurationTimerIfNeeded();
       notifyListeners();
+      if (openCallScreen && !_isCallScreenOpen) {
+        openCallScreenNow();
+      }
       return;
     }
 
@@ -448,9 +511,14 @@ class CallProvider extends ChangeNotifier {
       return;
     }
 
+    _isInCall = true;
     _localStream = _webRTCService.localStream;
     _webRTCService.toggleSpeaker(_isSpeaker);
     notifyListeners();
+
+    if (openCallScreen && !_isCallScreenOpen) {
+      openCallScreenNow();
+    }
 
     // Send the call started message in the background AFTER the WebRTC call document exists in Firestore!
     unawaited(() async {

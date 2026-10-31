@@ -20,9 +20,18 @@ class CallkitService {
   String? _lastKnownCallId;
   String? _lastKnownCallerName;
 
+  /// Tracks callIds that have already triggered CallKit so duplicate FCM messages never show multiple notifications
+  static final Set<String> _shownCallIds = <String>{};
+
+  /// Prevents programmatic endAllCalls() (used to dismiss ringing UI on accept) from triggering CallEventActionCallEnded
+  bool _ignoringProgrammaticEnd = false;
+  Timer? _ignoreEndTimer;
+
   Function(String callId, String roomId, Map<String, dynamic>? offer, String? callerName)? onCallAccepted;
   Function(String callId, String roomId)? onCallDeclined;
   Function(String callId)? onCallEndedBySystem;
+
+  bool hasShownCall(String callId) => _shownCallIds.contains(callId);
 
   Future<void> showCallkitIncoming({
     required String callerName,
@@ -30,6 +39,13 @@ class CallkitService {
     required String callId,
     Map<String, dynamic>? offer,
   }) async {
+    if (callId.isNotEmpty && _shownCallIds.contains(callId)) {
+      return;
+    }
+    if (callId.isNotEmpty) {
+      _shownCallIds.add(callId);
+    }
+
     _lastKnownRoomId = roomId;
     _lastKnownCallId = callId;
     _lastKnownCallerName = callerName;
@@ -48,6 +64,10 @@ class CallkitService {
         showNotification: false,
         isShowCallback: false,
       ),
+      callingNotification: const NotificationParams(
+        showNotification: false,
+        isShowCallback: false,
+      ),
       duration: 45000,
       extra: <String, dynamic>{
         'roomId': roomId,
@@ -59,7 +79,7 @@ class CallkitService {
         isCustomNotification: true,
         isShowLogo: false,
         ringtonePath: 'system_ringtone_default',
-        backgroundColor: '#0A0E12',
+        backgroundColor: '#0B1014',
         backgroundUrl: 'assets/mozechat.png',
         actionColor: '#159D87',
         textColor: '#ffffff',
@@ -101,7 +121,13 @@ class CallkitService {
     }
   }
 
+  /// Dismisses any CallKit notifications without triggering onCallEndedBySystem
   Future<void> endAllCalls() async {
+    _ignoringProgrammaticEnd = true;
+    _ignoreEndTimer?.cancel();
+    _ignoreEndTimer = Timer(const Duration(milliseconds: 2500), () {
+      _ignoringProgrammaticEnd = false;
+    });
     try {
       await FlutterCallkitIncoming.endAllCalls();
     } catch (e) {
@@ -112,32 +138,30 @@ class CallkitService {
   /// Checks if there is an accepted/active CallKit call when the app starts or resumes from background
   Future<void> checkActiveCallsAndJoinIfNeeded() async {
     try {
-      final dynamic active = await FlutterCallkitIncoming.activeCalls();
-      if (active is List && active.isNotEmpty) {
-        final first = active.first;
-        if (first is Map) {
-          final callId = (first['id']?.toString()) ?? _lastKnownCallId ?? '';
-          final extra = first['extra'];
-          String roomId = _lastKnownRoomId ?? '';
-          String? callerName = _lastKnownCallerName;
-          Map<String, dynamic>? offerMap;
+      final List<CallKitParams> active = await FlutterCallkitIncoming.activeCalls();
+      if (active.isNotEmpty) {
+        final CallKitParams first = active.first;
+        final callId = first.id.isNotEmpty ? first.id : (_lastKnownCallId ?? '');
+        final extra = first.extra;
+        String roomId = _lastKnownRoomId ?? '';
+        String? callerName = first.nameCaller ?? _lastKnownCallerName;
+        Map<String, dynamic>? offerMap;
 
-          if (extra is Map) {
-            roomId = (extra['roomId']?.toString()) ?? roomId;
-            callerName = (extra['callerName']?.toString()) ?? callerName;
-            final rawOffer = extra['offer'];
-            if (rawOffer is Map) {
-              offerMap = Map<String, dynamic>.from(rawOffer);
-            } else if (rawOffer is String && rawOffer.isNotEmpty) {
-              try {
-                offerMap = Map<String, dynamic>.from(jsonDecode(rawOffer));
-              } catch (_) {}
-            }
+        if (extra != null) {
+          roomId = (extra['roomId']?.toString()) ?? roomId;
+          callerName = (extra['callerName']?.toString()) ?? callerName;
+          final rawOffer = extra['offer'];
+          if (rawOffer is Map) {
+            offerMap = Map<String, dynamic>.from(rawOffer);
+          } else if (rawOffer is String && rawOffer.isNotEmpty) {
+            try {
+              offerMap = Map<String, dynamic>.from(jsonDecode(rawOffer));
+            } catch (_) {}
           }
+        }
 
-          if (callId.isNotEmpty && roomId.isNotEmpty && onCallAccepted != null) {
-            onCallAccepted!(callId, roomId, offerMap, callerName);
-          }
+        if (callId.isNotEmpty && roomId.isNotEmpty && onCallAccepted != null) {
+          onCallAccepted!(callId, roomId, offerMap, callerName);
         }
       }
     } catch (e) {
@@ -170,11 +194,7 @@ class CallkitService {
           } catch (_) {}
         }
 
-        if (callId.isNotEmpty) {
-          await setCallConnected(callId);
-        }
-
-        if (onCallAccepted != null && callId.isNotEmpty && roomId.isNotEmpty) {
+        if (onCallAccepted != null && (callId.isNotEmpty || roomId.isNotEmpty)) {
           onCallAccepted!(callId, roomId, offerMap, callerName);
         }
       } else if (event is CallEventActionCallDecline) {
@@ -188,6 +208,10 @@ class CallkitService {
           onCallDeclined!(callId, roomId);
         }
       } else if (event is CallEventActionCallEnded) {
+        // Ignore programmatic endAllCalls() triggered when transitioning from CallKit notification to CallScreen
+        if (_ignoringProgrammaticEnd) {
+          return;
+        }
         final callId = event.callKitParams.id;
         if (onCallEndedBySystem != null) {
           onCallEndedBySystem!(callId);

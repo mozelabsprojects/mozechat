@@ -40,7 +40,7 @@ class _CallScreenState extends State<CallScreen>
   void _onCallStateChanged() {
     if (!mounted || _hasPopped || _callProvider == null) return;
 
-    if (!_callProvider!.isInCall) {
+    if (!_callProvider!.isInCall && !_callProvider!.isJoiningCall) {
       _hasPopped = true;
       _callProvider!.setCallScreenOpen(false);
       if (Navigator.of(context).canPop()) {
