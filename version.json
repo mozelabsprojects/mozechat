@@ -1,7 +1,7 @@
 {
-  "version": "0.1.2",
-  "versionCode": 3,
+  "version": "0.1.3",
+  "versionCode": 4,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 📞 WebRTC sesli arama cızırtı giderimi (48kHz Opus, AEC/NS/AGC), konuşurken kendi kendine kapanma koruması (ICE auto-restart) ve hang-up senkronizasyonu\n• 🟢 WhatsApp tarzı aktif/gelen arama üst banner'ı ve aramayı küçülterek sohbete dönme desteği\n• 🌐 Tüm ekranlar, diyaloglar, bildirimler ve sistem mesajları için %100 TR/EN dil (i18n) entegrasyonu\n• 🔔 Akıllı bildirim yönetimi: Aktif sohbet ekranındayken üstten bildirim susturma (WhatsApp mantığı)\n• 🧹 Eski bot ve !komutlar kalıntılarının tamamen temizlenmesi",
+  "changelog": "• 📞 WhatsApp tarzı yeni WebRTC sesli arama arayüzü (temaya duyarlı, hafif ve yüksek performanslı)\n• ⚡ Bildirimden ve sohbet içi arama mesajı balonundan tek tıkla anında (0ms) aramaya katılma düzeltmesi\n• 🔊 Android WebRTC donanımsal yankı engelleme (AEC) ve gürültü azaltma (NS) kısıtlama düzeltmesi\n• 🔄 Cihaz saat farkı (clock skew) nedeniyle aramanın kendiliğinden kapanması hatası giderildi",
   "forceUpdate": false
 }

@@ -7,6 +7,7 @@ import 'package:intl/intl.dart';
 import 'package:provider/provider.dart';
 import '../models/message.dart';
 import '../providers/chat_provider.dart';
+import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../services/location_service.dart';
 import '../screens/photo_view_screen.dart';
@@ -604,11 +605,19 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         isAnonymous: widget.msg.metadata?['voiceFilter'] == 'anonymous',
       );
     } else if (widget.msg.text.startsWith('📞')) {
+      final callProvider = context.watch<CallProvider>();
+      final chatProvider = context.read<ChatProvider>();
       final lowerText = widget.msg.text.toLowerCase();
       final isEnded = lowerText.contains('sonlandırıldı') || lowerText.contains('ended');
+      final isRecent = DateTime.now().difference(widget.msg.timestamp).inSeconds < 90;
+      final canJoinActive = !isEnded &&
+          (callProvider.hasIncomingRoomCall ||
+              callProvider.isInCall ||
+              (!widget.isMe && isRecent));
+
       String cleanText;
       if (isEnded) {
-        final durMatch = RegExp(r'(\d{2}:\d{2})').firstMatch(widget.msg.text);
+        final durMatch = RegExp(r'(\d{2}:\d{2}|\d+m\s*\d+s)').firstMatch(widget.msg.text);
         final dur = durMatch?.group(1);
         cleanText = dur != null
             ? strings.callEndedMsg(dur).replaceFirst('📞', '').trim()
@@ -616,33 +625,104 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
       } else {
         cleanText = strings.callStartedMsg.replaceFirst('📞', '').trim();
       }
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: (isEnded ? Colors.grey : const Color(0xFF159D87)).withValues(alpha: 0.2),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              isEnded ? Icons.call_end_rounded : Icons.phone_in_talk_rounded,
-              size: 18,
-              color: isEnded ? widget.textColor.withValues(alpha: 0.7) : const Color(0xFF159D87),
-            ),
-          ),
-          const SizedBox(width: 10),
-          Flexible(
-            child: Text(
-              cleanText,
-              style: TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w600,
-                color: widget.textColor,
+
+      return GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () async {
+          HapticFeedback.mediumImpact();
+          final roomCode = chatProvider.roomCode;
+          final uid = chatProvider.currentUserId;
+          final nick = chatProvider.nickname ?? strings.unknownUser;
+          if (roomCode == null || uid == null) return;
+
+          if (callProvider.isInCall) {
+            callProvider.openCallScreenNow();
+          } else if (canJoinActive) {
+            await callProvider.joinIncomingRoomCall(
+              roomCode: roomCode,
+              callerName: widget.msg.nickname,
+              openCallScreen: true,
+            );
+          } else {
+            await callProvider.startCall(
+              roomCode,
+              uid,
+              nick,
+              openCallScreen: true,
+            );
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: (isEnded ? Colors.grey : const Color(0xFF159D87))
+                      .withValues(alpha: 0.22),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  isEnded ? Icons.call_end_rounded : Icons.phone_in_talk_rounded,
+                  size: 18,
+                  color: isEnded
+                      ? widget.textColor.withValues(alpha: 0.7)
+                      : const Color(0xFF159D87),
+                ),
               ),
-            ),
+              const SizedBox(width: 10),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      cleanText,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: widget.textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      canJoinActive
+                          ? strings.tapToReturnToCall
+                          : strings.callBackText,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.bold,
+                        color: canJoinActive
+                            ? const Color(0xFF159D87)
+                            : widget.textColor.withValues(alpha: 0.65),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 10),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: canJoinActive
+                      ? const Color(0xFF159D87)
+                      : widget.textColor.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Text(
+                  canJoinActive ? strings.joinCallBtn : strings.callBackText.toUpperCase(),
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.bold,
+                    color: canJoinActive ? Colors.white : widget.textColor,
+                  ),
+                ),
+              ),
+            ],
           ),
-        ],
+        ),
       );
     } else {
       String displayText = widget.msg.text;

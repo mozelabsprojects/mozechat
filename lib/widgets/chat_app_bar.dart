@@ -7,7 +7,6 @@ import '../providers/chat_provider.dart';
 import '../utils/color_utils.dart';
 import '../screens/media_gallery_screen.dart';
 import '../screens/rooms_list_screen.dart';
-import '../screens/call_screen.dart';
 import '../screens/panic_camouflage_screen.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
@@ -181,14 +180,14 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     return;
                   }
                   if (callProvider.isInCall) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (_) => const CallScreen()),
-                    );
+                    callProvider.openCallScreenNow();
                     return;
                   }
                   if (callProvider.hasIncomingRoomCall) {
-                    await callProvider.joinIncomingRoomCall(openCallScreen: true);
+                    await callProvider.joinIncomingRoomCall(
+                      roomCode: chatProvider.roomCode,
+                      openCallScreen: true,
+                    );
                     return;
                   }
                   try {
@@ -196,13 +195,8 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                       chatProvider.roomCode!,
                       chatProvider.currentUserId!,
                       chatProvider.nickname ?? strings.unknownUser,
+                      openCallScreen: true,
                     );
-                    if (context.mounted) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(builder: (_) => const CallScreen()),
-                      );
-                    }
                   } catch (e) {
                     debugPrint('Start call failed: $e');
                   }

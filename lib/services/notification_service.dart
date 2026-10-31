@@ -6,6 +6,7 @@ import 'package:firebase_core/firebase_core.dart';
 import '../main.dart';
 import '../screens/chat_screen.dart';
 import '../providers/chat_provider.dart';
+import '../providers/call_provider.dart';
 import '../repositories/chat_repository.dart';
 import '../services/preferences_service.dart';
 import '../services/crypto_service.dart';
@@ -19,7 +20,10 @@ void notificationTapBackground(
   WidgetsFlutterBinding.ensureInitialized();
   if (notificationResponse.actionId == 'reply_action') {
     final text = notificationResponse.input;
-    final roomCode = notificationResponse.payload;
+    final rawPayload = notificationResponse.payload;
+    final roomCode = rawPayload != null && rawPayload.startsWith('call:')
+        ? rawPayload.substring(5)
+        : rawPayload;
     if (text != null && text.isNotEmpty && roomCode != null && roomCode != 'app_update') {
       try {
         if (Firebase.apps.isEmpty) {
@@ -80,9 +84,10 @@ class NotificationService {
     if (!isUserInChatScreen) return false;
 
     if (roomCode != null && currentActiveRoomCode != null) {
-      if (roomCode.trim() == currentActiveRoomCode) return true;
+      final clean = roomCode.startsWith('call:') ? roomCode.substring(5).trim() : roomCode.trim();
+      if (clean == currentActiveRoomCode) return true;
       if (currentActiveRoomId != null &&
-          CryptoService.deriveRoomId(roomCode.trim()) == currentActiveRoomId) {
+          CryptoService.deriveRoomId(clean) == currentActiveRoomId) {
         return true;
       }
     }
@@ -108,7 +113,9 @@ class NotificationService {
 
   static Future<void> clearNotificationsForRoom(String roomCode) async {
     try {
-      await _notificationsPlugin.cancel(id: roomCode.hashCode.abs());
+      final clean = roomCode.startsWith('call:') ? roomCode.substring(5) : roomCode;
+      await _notificationsPlugin.cancel(id: clean.hashCode.abs());
+      await _notificationsPlugin.cancel(id: ('call:$clean').hashCode.abs());
     } catch (_) {}
   }
 
@@ -131,19 +138,32 @@ class NotificationService {
     await _notificationsPlugin.initialize(
       settings: initSettings,
       onDidReceiveNotificationResponse: (details) async {
-        final payload = details.payload;
-        if (payload != null && payload.isNotEmpty && payload != 'app_update') {
+        final rawPayload = details.payload;
+        if (rawPayload != null && rawPayload.isNotEmpty && rawPayload != 'app_update') {
+          final isCallTap = rawPayload.startsWith('call:') || details.actionId == 'join_call_action';
+          final roomCode = rawPayload.startsWith('call:')
+              ? rawPayload.substring(5)
+              : rawPayload;
+
           final context = navigatorKey.currentContext;
           if (context != null) {
             final chatProvider = context.read<ChatProvider>();
-            if (NotificationService.shouldSuppressNotification(roomCode: payload)) {
-              return;
+            final callProvider = context.read<CallProvider>();
+
+            if (!NotificationService.shouldSuppressNotification(roomCode: roomCode)) {
+              final success = await chatProvider.joinRoom(roomCode);
+              if (success && context.mounted) {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const ChatScreen()),
+                );
+              }
             }
-            final success = await chatProvider.joinRoom(payload);
-            if (success && context.mounted) {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (_) => const ChatScreen()),
+
+            if (isCallTap) {
+              await callProvider.joinIncomingRoomCall(
+                roomCode: roomCode,
+                openCallScreen: true,
               );
             }
           }
@@ -157,6 +177,7 @@ class NotificationService {
     required String title,
     required String body,
     String? payload,
+    bool isCallNotification = false,
   }) async {
     // WhatsApp logic: never show a top banner notification if the user is actively inside that chat room
     if (payload != null &&
@@ -170,6 +191,9 @@ class NotificationService {
     final strings = AppStrings(lang);
 
     final isChatPayload = payload != null && payload != 'app_update';
+    final effectivePayload = isCallNotification && isChatPayload && !payload.startsWith('call:')
+        ? 'call:$payload'
+        : payload;
 
     final androidDetails = AndroidNotificationDetails(
       'mozechat_messages_channel_v7',
@@ -178,20 +202,30 @@ class NotificationService {
       importance: Importance.max,
       priority: Priority.high,
       visibility: NotificationVisibility.public,
-      category: AndroidNotificationCategory.message,
+      category: isCallNotification
+          ? AndroidNotificationCategory.call
+          : AndroidNotificationCategory.message,
       ticker: 'ticker',
-      fullScreenIntent: false,
+      fullScreenIntent: isCallNotification,
       playSound: soundsEnabled,
       actions: isChatPayload
-          ? [
-              AndroidNotificationAction(
-                'reply_action',
-                strings.replyAction,
-                inputs: [
-                  AndroidNotificationActionInput(label: strings.replyHint),
-                ],
-              ),
-            ]
+          ? (isCallNotification
+              ? [
+                  AndroidNotificationAction(
+                    'join_call_action',
+                    strings.joinCallBtn,
+                    showsUserInterface: true,
+                  ),
+                ]
+              : [
+                  AndroidNotificationAction(
+                    'reply_action',
+                    strings.replyAction,
+                    inputs: [
+                      AndroidNotificationActionInput(label: strings.replyHint),
+                    ],
+                  ),
+                ])
           : null,
     );
 
@@ -205,11 +239,13 @@ class NotificationService {
     );
 
     await _notificationsPlugin.show(
-      id: payload != null ? payload.hashCode.abs() : DateTime.now().millisecond,
+      id: effectivePayload != null
+          ? effectivePayload.hashCode.abs()
+          : DateTime.now().millisecond,
       title: title,
       body: body,
       notificationDetails: notificationDetails,
-      payload: payload,
+      payload: effectivePayload,
     );
   }
 }

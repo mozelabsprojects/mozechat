@@ -14,7 +14,6 @@ import '../widgets/matrix_background.dart';
 import '../models/message.dart';
 import '../utils/color_utils.dart';
 import '../utils/app_strings.dart';
-import 'call_screen.dart';
 
 import '../widgets/chat_app_bar.dart';
 import '../widgets/chat_message_item.dart';
@@ -163,10 +162,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         color: const Color(0xFF159D87),
         child: InkWell(
           onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const CallScreen()),
-            );
+            callProvider.openCallScreenNow();
           },
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
@@ -241,98 +237,117 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     // Incoming Call Banner (WhatsApp-style Join / Decline bar at top of chat)
     if (callProvider.hasIncomingRoomCall) {
       final caller = callProvider.incomingCallerName ?? strings.unknownUser;
-      return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: const Color(0xFF111922),
-          border: Border(
-            bottom: BorderSide(
-              color: const Color(0xFF159D87).withValues(alpha: 0.4),
-              width: 1,
+      final roomCode = context.read<ChatProvider>().roomCode;
+      return Material(
+        color: const Color(0xFF111922),
+        child: InkWell(
+          onTap: () async {
+            HapticFeedback.mediumImpact();
+            await callProvider.joinIncomingRoomCall(
+              roomCode: roomCode,
+              openCallScreen: true,
+            );
+          },
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              border: Border(
+                bottom: BorderSide(
+                  color: const Color(0xFF159D87).withValues(alpha: 0.4),
+                  width: 1,
+                ),
+              ),
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF159D87).withValues(alpha: 0.2),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(
+                    Icons.ring_volume_rounded,
+                    color: Color(0xFF159D87),
+                    size: 18,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        caller,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 13,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      Text(
+                        strings.incomingVoiceCall,
+                        style: const TextStyle(
+                          color: Color(0xFF159D87),
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                GestureDetector(
+                  onTap: () {
+                    HapticFeedback.lightImpact();
+                    callProvider.declineIncomingRoomCall();
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: Colors.redAccent.withValues(alpha: 0.9),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      strings.declineCallBtn,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                GestureDetector(
+                  onTap: () async {
+                    HapticFeedback.mediumImpact();
+                    await callProvider.joinIncomingRoomCall(
+                      roomCode: roomCode,
+                      openCallScreen: true,
+                    );
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF159D87),
+                      borderRadius: BorderRadius.circular(18),
+                    ),
+                    child: Text(
+                      strings.joinCallBtn,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(8),
-              decoration: BoxDecoration(
-                color: const Color(0xFF159D87).withValues(alpha: 0.2),
-                shape: BoxShape.circle,
-              ),
-              child: const Icon(
-                Icons.ring_volume_rounded,
-                color: Color(0xFF159D87),
-                size: 18,
-              ),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    caller,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 13,
-                    ),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  Text(
-                    strings.incomingVoiceCall,
-                    style: const TextStyle(
-                      color: Color(0xFF159D87),
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            GestureDetector(
-              onTap: () => callProvider.declineIncomingRoomCall(),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 7),
-                decoration: BoxDecoration(
-                  color: Colors.redAccent.withValues(alpha: 0.9),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  strings.declineCallBtn,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-            GestureDetector(
-              onTap: () async {
-                await callProvider.joinIncomingRoomCall(openCallScreen: true);
-              },
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF159D87),
-                  borderRadius: BorderRadius.circular(18),
-                ),
-                child: Text(
-                  strings.joinCallBtn,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 11,
-                  ),
-                ),
-              ),
-            ),
-          ],
         ),
       );
     }
@@ -800,6 +815,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         body: Center(child: CircularProgressIndicator(color: accent)),
       );
     }
+
+    // Ensure room call watcher is always bound to the active roomCode & currentUserId
+    callProvider.watchRoomCalls(
+      chatProvider.roomCode,
+      chatProvider.currentUserId,
+    );
 
     return Scaffold(
       extendBodyBehindAppBar: true,

@@ -126,6 +126,59 @@ class CallRepository {
     }
   }
 
+  /// Fetch a specific call document once (used when answering from CallKit or notification)
+  Future<Map<String, dynamic>?> getCall(String roomCode, String callId) async {
+    try {
+      final roomId = resolveRoomId(roomCode);
+      final doc = await _firestore
+          .collection('rooms')
+          .doc(roomId)
+          .collection('calls')
+          .doc(callId)
+          .get();
+      if (!doc.exists) return null;
+      final data = doc.data();
+      if (data == null) return null;
+      return {
+        ...data,
+        'callId': doc.id,
+      };
+    } catch (e) {
+      debugPrint('getCall error: $e');
+      return null;
+    }
+  }
+
+  /// Fetch the latest active ringing call in a room (if any)
+  Future<Map<String, dynamic>?> getLatestRingingCall(
+    String roomCode, {
+    String? excludeCallerId,
+  }) async {
+    try {
+      final roomId = resolveRoomId(roomCode);
+      final snap = await _firestore
+          .collection('rooms')
+          .doc(roomId)
+          .collection('calls')
+          .where('status', isEqualTo: 'ringing')
+          .get();
+      for (final doc in snap.docs) {
+        final data = doc.data();
+        final callerId = data['callerId'] as String?;
+        if (excludeCallerId != null && callerId == excludeCallerId) continue;
+        if (data['offer'] is Map) {
+          return {
+            ...data,
+            'callId': doc.id,
+          };
+        }
+      }
+    } catch (e) {
+      debugPrint('getLatestRingingCall error: $e');
+    }
+    return null;
+  }
+
   /// Listen to a specific call document state
   Stream<DocumentSnapshot> listenToCall(String roomCode, String callId) {
     final roomId = resolveRoomId(roomCode);

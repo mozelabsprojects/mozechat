@@ -109,17 +109,41 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
         final text = (payload['text'] as String?) ?? '';
         final nickname = (payload['nickname'] as String?) ?? strings.unknownUser;
+        final lowerText = text.toLowerCase();
+        final isCallStartMsg = text.startsWith('📞') &&
+            !lowerText.contains('sonlandırıldı') &&
+            !lowerText.contains('ended');
 
         await NotificationService.initialize();
+
+        if (isCallStartMsg) {
+          // Also trigger CallKit incoming call if an active ringing call exists in Firestore
+          try {
+            final ringingDoc = await CallRepository().getLatestRingingCall(
+              matchedCode,
+              excludeCallerId: uid,
+            );
+            if (ringingDoc != null && ringingDoc['callId'] != null) {
+              await CallkitService().showCallkitIncoming(
+                callerName: nickname,
+                roomId: matchedCode,
+                callId: ringingDoc['callId'].toString(),
+              );
+            }
+          } catch (_) {}
+        }
 
         if (!NotificationService.shouldSuppressNotification(
           roomCode: matchedCode,
           roomId: roomId,
         )) {
           await NotificationService.showMessageNotification(
-            title: strings.newMessageFrom(nickname),
+            title: isCallStartMsg
+                ? '${strings.incomingVoiceCall}: $nickname'
+                : strings.newMessageFrom(nickname),
             body: text,
             payload: matchedCode,
+            isCallNotification: isCallStartMsg,
           );
         }
       } catch (e) {
@@ -142,16 +166,14 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
     final callerName = message.data['callerName'] as String?;
     final callerId = message.data['callerId'] as String?;
     final callId = message.data['callId'] as String?;
-    final offerStr = message.data['offer'] as String?;
 
     final currentUid = FirebaseAuth.instance.currentUser?.uid;
     if (currentUid != null && callerId != null && callerId == currentUid) {
       return;
     }
 
-    if (roomId != null && callId != null && offerStr != null) {
+    if (roomId != null && callId != null) {
       try {
-        // Verify the call is still actively ringing before showing CallKit
         final resolvedId = CallRepository().resolveRoomId(roomId);
         final callSnap = await FirebaseFirestore.instance
             .collection('rooms')
@@ -170,12 +192,10 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           }
         }
 
-        final offer = jsonDecode(offerStr);
         await CallkitService().showCallkitIncoming(
           callerName: callerName ?? strings.unknownUser,
           roomId: roomId,
           callId: callId,
-          offer: Map<String, dynamic>.from(offer),
         );
       } catch (e) {
         debugPrint('Callkit show error: $e');
@@ -288,15 +308,29 @@ class MozechatApp extends StatefulWidget {
   State<MozechatApp> createState() => _MozechatAppState();
 }
 
-class _MozechatAppState extends State<MozechatApp> {
+class _MozechatAppState extends State<MozechatApp> with WidgetsBindingObserver {
   bool _isInitializing = true;
   Widget _homeScreen = const LoginScreen();
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _handleInitialRoute();
     CallkitService().listenToCallEvents();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      CallkitService().checkActiveCallsAndJoinIfNeeded();
+    }
   }
 
   Future<void> _handleInitialRoute() async {
@@ -328,15 +362,29 @@ class _MozechatAppState extends State<MozechatApp> {
 
       if (!mounted) return;
       if (widget.initialRoom != null) {
+        final isCallLaunch = widget.initialRoom!.startsWith('call:');
+        final targetRoom = isCallLaunch
+            ? widget.initialRoom!.substring(5)
+            : widget.initialRoom!;
+
         final chatProvider = context.read<ChatProvider>();
-        final success = await chatProvider.joinRoom(widget.initialRoom!);
+        final callProvider = context.read<CallProvider>();
+        final success = await chatProvider.joinRoom(targetRoom);
         if (success && mounted) {
           _homeScreen = const RoomsListScreen();
-          WidgetsBinding.instance.addPostFrameCallback((_) {
+          WidgetsBinding.instance.addPostFrameCallback((_) async {
             if (navigatorKey.currentState != null) {
               navigatorKey.currentState!.push(
                 MaterialPageRoute(builder: (_) => const ChatScreen()),
               );
+              if (isCallLaunch) {
+                await callProvider.joinIncomingRoomCall(
+                  roomCode: targetRoom,
+                  openCallScreen: true,
+                );
+              } else {
+                await CallkitService().checkActiveCallsAndJoinIfNeeded();
+              }
             }
           });
         } else {
@@ -344,6 +392,9 @@ class _MozechatAppState extends State<MozechatApp> {
         }
       } else {
         _homeScreen = const RoomsListScreen();
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          CallkitService().checkActiveCallsAndJoinIfNeeded();
+        });
       }
     }
 

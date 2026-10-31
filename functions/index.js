@@ -93,6 +93,7 @@ exports.sendNewCallNotification = onDocumentCreated("rooms/{roomId}/calls/{callI
     const callerSnap = await admin.firestore().collection("users").doc(callerId).get();
     const callerName = callerSnap.exists ? (callerSnap.data().nickname || "Biri") : "Biri";
 
+    const offerStr = JSON.stringify(callData.offer || {});
     const payload = {
         data: {
             type: "NEW_CALL",
@@ -100,7 +101,8 @@ exports.sendNewCallNotification = onDocumentCreated("rooms/{roomId}/calls/{callI
             roomCode: callData.roomCode || roomId,
             callId: callId,
             callerName: callerName,
-            offer: JSON.stringify(callData.offer || {}),
+            // FCM data payload is limited to 4KB; if offer is large, client fetches from Firestore
+            offer: offerStr.length < 2500 ? offerStr : "",
         }
     };
 

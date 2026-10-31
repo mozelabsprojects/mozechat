@@ -22,7 +22,7 @@ class WebRTCService {
 
   final Map<String, dynamic> _configuration = {
     'sdpSemantics': 'unified-plan',
-    'iceCandidatePoolSize': 10,
+    'iceCandidatePoolSize': 8,
     'bundlePolicy': 'max-bundle',
     'rtcpMuxPolicy': 'require',
     'iceServers': [
@@ -88,7 +88,6 @@ class WebRTCService {
           'maxaveragebitrate': '48000',
           'maxplaybackrate': '48000',
           'stereo': '0',
-          'sprop-stereo': '0',
         };
         String line = lines[i];
         paramsToEnsure.forEach((key, value) {
@@ -126,93 +125,126 @@ class WebRTCService {
     String callerId, {
     String? callerName,
   }) async {
-    await _prepareSession();
+    try {
+      await _prepareSession();
 
-    _roomId = roomCode;
-    _callId = const Uuid().v4();
-    _role = 'caller';
+      _roomId = roomCode;
+      _callId = const Uuid().v4();
+      _role = 'caller';
 
-    await _initLocalStream();
-    _peerConnection = await createPeerConnection(_configuration, _offerSdpConstraints);
-    _setupPeerConnectionListeners();
+      await _initLocalStream();
+      _peerConnection = await createPeerConnection(_configuration);
+      _setupPeerConnectionListeners();
 
-    if (_localStream != null) {
-      for (var track in _localStream!.getAudioTracks()) {
-        track.enabled = true;
-        await _peerConnection!.addTrack(track, _localStream!);
+      if (_localStream != null) {
+        for (var track in _localStream!.getAudioTracks()) {
+          track.enabled = true;
+          await _peerConnection!.addTrack(track, _localStream!);
+        }
       }
+
+      RTCSessionDescription offer = await _peerConnection!.createOffer(_offerSdpConstraints);
+      RTCSessionDescription localDesc = offer;
+      try {
+        final optimizedSdp = _optimizeSdpForVoice(offer.sdp);
+        final candidateOffer = RTCSessionDescription(optimizedSdp, offer.type);
+        await _peerConnection!.setLocalDescription(candidateOffer);
+        localDesc = candidateOffer;
+      } catch (e) {
+        debugPrint('Fallback to standard SDP offer: $e');
+        await _peerConnection!.setLocalDescription(offer);
+      }
+
+      await _callRepository.createOffer(
+        _roomId!,
+        _callId!,
+        callerId,
+        {
+          'sdp': localDesc.sdp,
+          'type': localDesc.type,
+        },
+        callerName: callerName,
+      );
+
+      // Start 45s ringing timeout in case callee never answers
+      _ringingTimeoutTimer?.cancel();
+      _ringingTimeoutTimer = Timer(const Duration(seconds: 45), () {
+        debugPrint('WebRTC ringing timeout reached (45s), ending call.');
+        endCall();
+      });
+
+      _listenToCallDocument();
+      _listenToIceCandidates();
+      return _callId;
+    } catch (e) {
+      debugPrint('WebRTC startCall error: $e');
+      await endCall();
+      return null;
     }
-
-    RTCSessionDescription offer = await _peerConnection!.createOffer(_offerSdpConstraints);
-    final optimizedSdp = _optimizeSdpForVoice(offer.sdp);
-    final optimizedOffer = RTCSessionDescription(optimizedSdp, offer.type);
-    await _peerConnection!.setLocalDescription(optimizedOffer);
-
-    await _callRepository.createOffer(
-      _roomId!,
-      _callId!,
-      callerId,
-      {
-        'sdp': optimizedOffer.sdp,
-        'type': optimizedOffer.type,
-      },
-      callerName: callerName,
-    );
-
-    // Start 45s ringing timeout in case callee never answers
-    _ringingTimeoutTimer?.cancel();
-    _ringingTimeoutTimer = Timer(const Duration(seconds: 45), () {
-      debugPrint('WebRTC ringing timeout reached (45s), ending call.');
-      endCall();
-    });
-
-    _listenToCallDocument();
-    _listenToIceCandidates();
-    return _callId;
   }
 
   /// Answer an incoming call
-  Future<void> joinCall(
+  Future<bool> joinCall(
     String roomCode,
     String callId,
     Map<String, dynamic> offer,
   ) async {
-    await _prepareSession();
+    try {
+      await _prepareSession();
 
-    _roomId = roomCode;
-    _callId = callId;
-    _role = 'callee';
+      _roomId = roomCode;
+      _callId = callId;
+      _role = 'callee';
 
-    await _initLocalStream();
-    _peerConnection = await createPeerConnection(_configuration, _offerSdpConstraints);
-    _setupPeerConnectionListeners();
+      await _initLocalStream();
+      _peerConnection = await createPeerConnection(_configuration);
+      _setupPeerConnectionListeners();
 
-    if (_localStream != null) {
-      for (var track in _localStream!.getAudioTracks()) {
-        track.enabled = true;
-        await _peerConnection!.addTrack(track, _localStream!);
+      if (_localStream != null) {
+        for (var track in _localStream!.getAudioTracks()) {
+          track.enabled = true;
+          await _peerConnection!.addTrack(track, _localStream!);
+        }
       }
+
+      final sdp = offer['sdp']?.toString();
+      final type = offer['type']?.toString() ?? 'offer';
+      if (sdp == null || sdp.isEmpty) {
+        throw Exception('Invalid offer SDP');
+      }
+
+      await _peerConnection!.setRemoteDescription(
+        RTCSessionDescription(sdp, type),
+      );
+      _hasSetRemoteDescription = true;
+
+      RTCSessionDescription answer = await _peerConnection!.createAnswer(_offerSdpConstraints);
+      RTCSessionDescription localAnswer = answer;
+      try {
+        final optimizedSdp = _optimizeSdpForVoice(answer.sdp);
+        final candidateAnswer = RTCSessionDescription(optimizedSdp, answer.type);
+        await _peerConnection!.setLocalDescription(candidateAnswer);
+        localAnswer = candidateAnswer;
+      } catch (e) {
+        debugPrint('Fallback to standard SDP answer: $e');
+        await _peerConnection!.setLocalDescription(answer);
+      }
+
+      await _callRepository.answerCall(_roomId!, _callId!, {
+        'sdp': localAnswer.sdp,
+        'type': localAnswer.type,
+      });
+
+      _processQueuedCandidates();
+      // Both caller and callee MUST listen to the call document for remote hang-up!
+      _listenToCallDocument();
+      _listenToIceCandidates();
+      return true;
+    } catch (e) {
+      debugPrint('WebRTC joinCall error: $e');
+      await endCall();
+      return false;
     }
-
-    await _peerConnection!.setRemoteDescription(
-      RTCSessionDescription(offer['sdp'], offer['type']),
-    );
-    _hasSetRemoteDescription = true;
-
-    RTCSessionDescription answer = await _peerConnection!.createAnswer(_offerSdpConstraints);
-    final optimizedSdp = _optimizeSdpForVoice(answer.sdp);
-    final optimizedAnswer = RTCSessionDescription(optimizedSdp, answer.type);
-    await _peerConnection!.setLocalDescription(optimizedAnswer);
-
-    await _callRepository.answerCall(_roomId!, _callId!, {
-      'sdp': optimizedAnswer.sdp,
-      'type': optimizedAnswer.type,
-    });
-
-    _processQueuedCandidates();
-    // Both caller and callee MUST listen to the call document for remote hang-up!
-    _listenToCallDocument();
-    _listenToIceCandidates();
   }
 
   void _setupPeerConnectionListeners() {
@@ -226,6 +258,21 @@ class WebRTCService {
         'sdpMid': candidate.sdpMid,
         'sdpMLineIndex': candidate.sdpMLineIndex,
       });
+    };
+
+    _peerConnection!.onIceConnectionState = (RTCIceConnectionState state) {
+      debugPrint('WebRTC ICE State ($_role): $state');
+      if (_isEndingCall) return;
+      if (state == RTCIceConnectionState.RTCIceConnectionStateConnected ||
+          state == RTCIceConnectionState.RTCIceConnectionStateCompleted) {
+        _ringingTimeoutTimer?.cancel();
+        _disconnectGraceTimer?.cancel();
+        _iceRestartTimer?.cancel();
+        if (_callId != null) {
+          CallkitService().setCallConnected(_callId!);
+        }
+        if (onCallConnected != null) onCallConnected!();
+      }
     };
 
     _peerConnection!.onConnectionState = (RTCPeerConnectionState state) {
@@ -293,21 +340,38 @@ class WebRTCService {
   }
 
   Future<void> _initLocalStream() async {
+    // Use both mandatory/optional format (required by Android flutter_webrtc MediaConstraintsUtils)
+    // and standard keys for cross-platform compatibility.
     final Map<String, dynamic> mediaConstraints = {
       'audio': {
-        'echoCancellation': true,
-        'noiseSuppression': true,
-        'autoGainControl': true,
-        'googEchoCancellation': true,
-        'googAutoGainControl': true,
-        'googNoiseSuppression': true,
-        'googHighpassFilter': true,
-        'googTypingNoiseDetection': true,
-        'googAudioMirroring': false,
+        'mandatory': <String, dynamic>{},
+        'optional': <Map<String, dynamic>>[
+          {'echoCancellation': true},
+          {'googEchoCancellation': true},
+          {'googEchoCancellation2': true},
+          {'googDAEchoCancellation': true},
+          {'noiseSuppression': true},
+          {'googNoiseSuppression': true},
+          {'googNoiseSuppression2': true},
+          {'autoGainControl': true},
+          {'googAutoGainControl': true},
+          {'googAutoGainControl2': true},
+          {'googHighpassFilter': true},
+          {'googTypingNoiseDetection': true},
+          {'googAudioMirroring': false},
+        ],
       },
       'video': false,
     };
-    _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+    try {
+      _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+    } catch (e) {
+      debugPrint('Fallback to default audio constraints: $e');
+      _localStream = await navigator.mediaDevices.getUserMedia({
+        'audio': true,
+        'video': false,
+      });
+    }
   }
 
   void _processQueuedCandidates() {
@@ -353,7 +417,10 @@ class WebRTCService {
           _ringingTimeoutTimer?.cancel();
           try {
             await _peerConnection?.setRemoteDescription(
-              RTCSessionDescription(answer['sdp'], answer['type']),
+              RTCSessionDescription(
+                answer['sdp'].toString(),
+                (answer['type'] ?? 'answer').toString(),
+              ),
             );
             _processQueuedCandidates();
           } catch (e) {
@@ -376,10 +443,14 @@ class WebRTCService {
         if (change.type == DocumentChangeType.added) {
           final data = change.doc.data() as Map<String, dynamic>?;
           if (data == null || data['candidate'] == null) continue;
+          final sdpMLineIdxRaw = data['sdpMLineIndex'];
+          final int? sdpMLineIdx = sdpMLineIdxRaw is int
+              ? sdpMLineIdxRaw
+              : int.tryParse(sdpMLineIdxRaw?.toString() ?? '');
           final candidate = RTCIceCandidate(
-            data['candidate'],
-            data['sdpMid'],
-            data['sdpMLineIndex'],
+            data['candidate'].toString(),
+            data['sdpMid']?.toString(),
+            sdpMLineIdx,
           );
 
           if (!_hasSetRemoteDescription) {
