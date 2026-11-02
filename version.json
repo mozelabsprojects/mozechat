@@ -1,7 +1,7 @@
 {
-  "version": "0.2.1",
-  "versionCode": 7,
+  "version": "0.2.2",
+  "versionCode": 8,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 🔑 Kalıcı keystore anahtarı ile paket çakışması (imza uyuşmazlığı) çözüldü\n• 🏠 Uygulama açılışında direkt sohbet ekranına girmesi engellendi; ana sohbet listesi ekranına geçiş sağlandı\n• 🔴 Sohbetler listesinde yeni mesajı olan odalara kırmızı okunmamış mesaj bildirim ikonu (1-99) eklendi\n• 💬 WhatsApp tarzı çift gri iletildi (delivered) tiki ve çift mavi okundu tiki optimize edildi",
+  "changelog": "• 📞 WhatsApp tarzı sesli arama akışı: Arka planda/kilitli ekranda anında tam ekran/bildirim ile çalma ve anında katılma sağlandı\n• 🛑 Arama sonlandırıldığında bildirim ve arayüzde 'hâlâ aranıyor' hayalet çağrı kalıntısı tamamen giderildi\n• 📡 Cloud Functions END_CALL entegrasyonu ile çağrı bittiğinde karşı taraftaki zil ve bildirim anında susturuluyor\n• 📉 Mobil veri optimizasyonu: WebRTC Opus 28kbps DTX, görsel ve medya sıkıştırmaları optimize edildi",
   "forceUpdate": false
 }

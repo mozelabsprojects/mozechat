@@ -96,9 +96,9 @@ class MediaService {
     final result = await FlutterImageCompress.compressAndGetFile(
       file.absolute.path,
       targetPath,
-      quality: isHD ? 90 : 70,
-      minWidth: isHD ? 2048 : 1024,
-      minHeight: isHD ? 2048 : 1024,
+      quality: isHD ? 85 : 68,
+      minWidth: isHD ? 1920 : 1080,
+      minHeight: isHD ? 1920 : 1080,
       format: CompressFormat.jpeg,
     );
 

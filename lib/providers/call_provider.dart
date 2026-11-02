@@ -288,8 +288,14 @@ class CallProvider extends ChangeNotifier {
           final status = data['status'] as String?;
           final callerId = data['callerId'] as String?;
           final offer = data['offer'];
+          final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+
+          // Ignore stale ghost calls older than 45 seconds
+          final isRecent = createdAt == null ||
+              DateTime.now().difference(createdAt).inSeconds < 45;
 
           if (status == 'ringing' &&
+              isRecent &&
               callerId != null &&
               callerId != uid &&
               offer is Map) {
@@ -545,6 +551,10 @@ class CallProvider extends ChangeNotifier {
     final nickname = _currentUserNickname;
 
     _resetCallState();
+    _clearIncomingBannerState();
+    if (roomCode != null) {
+      unawaited(NotificationService.clearNotificationsForRoom(roomCode));
+    }
     await _webRTCService.endCall();
 
     if (wasInCall && roomCode != null && nickname != null && (wasConnected || wasCaller)) {

@@ -8,6 +8,8 @@ import 'package:flutter_callkit_incoming/entities/notification_params.dart';
 import 'package:flutter_callkit_incoming/entities/ios_params.dart';
 import 'package:flutter_callkit_incoming/entities/android_params.dart';
 import 'preferences_service.dart';
+import 'notification_service.dart';
+import '../repositories/call_repository.dart';
 import '../utils/app_strings.dart';
 
 class CallkitService {
@@ -32,6 +34,7 @@ class CallkitService {
   Function(String callId)? onCallEndedBySystem;
 
   bool hasShownCall(String callId) => _shownCallIds.contains(callId);
+  static void removeShownCall(String callId) => _shownCallIds.remove(callId);
 
   Future<void> showCallkitIncoming({
     required String callerName,
@@ -128,6 +131,9 @@ class CallkitService {
     _ignoreEndTimer = Timer(const Duration(milliseconds: 2500), () {
       _ignoringProgrammaticEnd = false;
     });
+    _lastKnownCallId = null;
+    _lastKnownRoomId = null;
+    _lastKnownCallerName = null;
     try {
       await FlutterCallkitIncoming.endAllCalls();
     } catch (e) {
@@ -157,6 +163,17 @@ class CallkitService {
             try {
               offerMap = Map<String, dynamic>.from(jsonDecode(rawOffer));
             } catch (_) {}
+          }
+        }
+
+        // Verify with Firestore before blindly re-joining!
+        // If the call was already ended, dismiss CallKit and do NOT join!
+        if (callId.isNotEmpty && roomId.isNotEmpty) {
+          final callDoc = await CallRepository().getCall(roomId, callId);
+          if (callDoc == null || callDoc['status'] != 'ringing') {
+            await endAllCalls();
+            await NotificationService.clearNotificationsForRoom(roomId);
+            return;
           }
         }
 

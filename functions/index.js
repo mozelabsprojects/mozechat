@@ -1,4 +1,4 @@
-const { onDocumentCreated } = require("firebase-functions/v2/firestore");
+const { onDocumentCreated, onDocumentUpdated } = require("firebase-functions/v2/firestore");
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const admin = require("firebase-admin");
 
@@ -124,6 +124,61 @@ exports.sendNewCallNotification = onDocumentCreated("rooms/{roomId}/calls/{callI
         console.log("Call push notifications sent:", response.successCount);
     } catch (error) {
         console.error("Error sending call push notifications:", error);
+    }
+});
+
+exports.sendCallStatusNotification = onDocumentUpdated("rooms/{roomId}/calls/{callId}", async (event) => {
+    const beforeData = event.data?.before?.data();
+    const afterData = event.data?.after?.data();
+    if (!afterData) return;
+
+    // Only notify when status transitions to 'ended' or 'declined'
+    if ((afterData.status === 'ended' || afterData.status === 'declined') &&
+        beforeData && beforeData.status !== afterData.status) {
+        const roomId = event.params.roomId;
+        const callId = event.params.callId;
+
+        const roomSnap = await admin.firestore().collection("rooms").doc(roomId).get();
+        if (!roomSnap.exists) return;
+
+        const roomData = roomSnap.data();
+        const fcmTokens = roomData.fcmTokens || {};
+        const tokensToNotify = [];
+
+        for (const [uid, token] of Object.entries(fcmTokens)) {
+            if (token) {
+                tokensToNotify.push(token);
+            }
+        }
+
+        if (tokensToNotify.length === 0) return;
+
+        const payload = {
+            data: {
+                type: "END_CALL",
+                roomId: roomId,
+                roomCode: afterData.roomCode || roomId,
+                callId: callId,
+            }
+        };
+
+        try {
+            const response = await admin.messaging().sendEachForMulticast({
+                tokens: tokensToNotify,
+                data: payload.data,
+                android: { priority: "high" },
+                apns: {
+                    payload: {
+                        aps: {
+                            contentAvailable: true
+                        }
+                    }
+                }
+            });
+            console.log("End call push notifications sent:", response.successCount);
+        } catch (error) {
+            console.error("Error sending end call push notifications:", error);
+        }
     }
 });
 

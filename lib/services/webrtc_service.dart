@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:uuid/uuid.dart';
 import '../repositories/call_repository.dart';
 import 'callkit_service.dart';
+import 'notification_service.dart';
 
 class WebRTCService {
   final CallRepository _callRepository = CallRepository();
@@ -85,8 +86,8 @@ class WebRTCService {
           'ptime': '20',
           'useinbandfec': '1',
           'usedtx': '1',
-          'maxaveragebitrate': '48000',
-          'maxplaybackrate': '48000',
+          'maxaveragebitrate': '28000',
+          'maxplaybackrate': '32000',
           'stereo': '0',
         };
         String line = lines[i];
@@ -526,8 +527,11 @@ class WebRTCService {
 
     // Ensure CallKit system UI / ongoing call notification is immediately cleared
     await CallkitService().endAllCalls();
+    if (roomToEnd != null) {
+      unawaited(NotificationService.clearNotificationsForRoom(roomToEnd));
+    }
 
-    if (!fromRemote && roomToEnd != null) {
+    if (roomToEnd != null) {
       try {
         if (callToEnd != null) {
           await _callRepository.endCall(roomToEnd, callToEnd);

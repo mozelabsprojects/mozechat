@@ -166,6 +166,18 @@ class CallRepository {
         final data = doc.data();
         final callerId = data['callerId'] as String?;
         if (excludeCallerId != null && callerId == excludeCallerId) continue;
+
+        final createdAt = (data['createdAt'] as Timestamp?)?.toDate();
+        final isRecent = createdAt == null ||
+            DateTime.now().difference(createdAt).inSeconds < 45;
+        if (!isRecent) {
+          doc.reference.update({
+            'status': 'ended',
+            'endedAt': FieldValue.serverTimestamp(),
+          }).catchError((_) {});
+          continue;
+        }
+
         if (data['offer'] is Map) {
           return {
             ...data,

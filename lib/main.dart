@@ -233,31 +233,33 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
           return;
         }
 
-        final callSnap = await FirebaseFirestore.instance
-            .collection('rooms')
-            .doc(resolvedId)
-            .collection('calls')
-            .doc(callId)
-            .get();
-        if (callSnap.exists) {
-          final status = callSnap.data()?['status'] as String?;
-          if (status != null && status != 'ringing') {
-            return;
-          }
-          final docCallerId = callSnap.data()?['callerId'] as String?;
-          if (currentUid != null && docCallerId == currentUid) {
-            return;
-          }
-        }
+        final effectiveCallerName = callerName ?? strings.unknownUser;
 
         await CallkitService().showCallkitIncoming(
-          callerName: callerName ?? strings.unknownUser,
+          callerName: effectiveCallerName,
           roomId: roomId,
           callId: callId,
+        );
+
+        await NotificationService.showMessageNotification(
+          title: strings.incomingVoiceCall,
+          body: effectiveCallerName,
+          payload: 'call:$roomId',
+          isCallNotification: true,
         );
       } catch (e) {
         debugPrint('Callkit show error: $e');
       }
+    }
+  } else if (message.data['type'] == 'END_CALL') {
+    final roomId = (message.data['roomCode'] ?? message.data['roomId']) as String?;
+    final callId = message.data['callId'] as String?;
+    await CallkitService().endAllCalls();
+    if (roomId != null) {
+      await NotificationService.clearNotificationsForRoom(roomId);
+    }
+    if (callId != null && callId.isNotEmpty) {
+      CallkitService.removeShownCall(callId);
     }
   }
 }
