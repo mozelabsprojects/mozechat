@@ -351,6 +351,16 @@ class _MozechatAppState extends State<MozechatApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       CallkitService().checkActiveCallsAndJoinIfNeeded();
+    } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.detached) {
+      final context = navigatorKey.currentContext;
+      if (context != null) {
+        try {
+          context.read<ChatProvider>().updatePresence(false);
+        } catch (_) {}
+      }
     }
   }
 

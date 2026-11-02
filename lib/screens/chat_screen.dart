@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
@@ -38,6 +39,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   ChatProvider? _chatProvider;
   CallProvider? _callProvider;
+  Timer? _presenceHeartbeatTimer;
 
   final Set<String> _selectedMessages = {};
   final ScrollController _scrollController = ScrollController();
@@ -63,6 +65,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       final chatProvider = context.read<ChatProvider>();
       final callProvider = context.read<CallProvider>();
       chatProvider.setUserInChat(true);
+      chatProvider.updatePresence(true);
       callProvider.watchRoomCalls(
         chatProvider.roomCode,
         chatProvider.currentUserId,
@@ -71,6 +74,12 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       if (chatProvider.tapToRevealEnabled) {
         final strings = context.read<LocaleProvider>().strings;
         CyberHUD.show(context, message: strings.tapToRevealHintBubble);
+      }
+    });
+
+    _presenceHeartbeatTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      if (mounted) {
+        _chatProvider?.updatePresence(true);
       }
     });
 
@@ -97,6 +106,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _presenceHeartbeatTimer?.cancel();
+    _presenceHeartbeatTimer = null;
+    _chatProvider?.updatePresence(false);
     _chatProvider?.setUserInChat(false);
     _chatProvider?.updateTyping(false);
     _callProvider?.watchRoomCalls(null, null);
@@ -116,6 +128,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
       provider.updatePresence(true);
       provider.setUserInChat(true);
     } else if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.inactive ||
+        state == AppLifecycleState.hidden ||
         state == AppLifecycleState.detached) {
       provider.setUserInChat(false);
       provider.updatePresence(false);

@@ -39,6 +39,7 @@ class ChatProvider extends ChangeNotifier {
   List<Message> _localMessages = [];
   StreamSubscription<List<Message>>? _messagesSubscription;
   StreamSubscription<DocumentSnapshot>? _roomSubscription;
+  Timer? _presenceCheckTimer;
 
   int _memberCount = 1;
   bool _isOtherOnline = false;
@@ -535,7 +536,18 @@ class ChatProvider extends ChangeNotifier {
 
   void _listenToRoom() {
     _roomSubscription?.cancel();
+    _presenceCheckTimer?.cancel();
     if (_roomCode != null) {
+      _presenceCheckTimer = Timer.periodic(const Duration(seconds: 15), (_) {
+        if (_isOtherOnline && _otherLastSeen != null) {
+          final diff = DateTime.now().difference(_otherLastSeen!).abs().inSeconds;
+          if (diff > 75) {
+            _isOtherOnline = false;
+            notifyListeners();
+          }
+        }
+      });
+
       _roomSubscription = _repository.listenToRoom(_roomCode!).listen((
         snapshot,
       ) async {
@@ -567,27 +579,35 @@ class ChatProvider extends ChangeNotifier {
           final notesData = data['notes'] as List<dynamic>? ?? [];
           _notes = notesData.cast<String>();
 
+          final oldOnline = _isOtherOnline;
+          final oldTyping = _isOtherTyping;
+          final oldLastSeen = _otherLastSeen;
+
           _isOtherOnline = false;
           _isOtherTyping = false;
           _otherLastSeen = null;
 
+          final now = DateTime.now();
+
           presence.forEach((key, value) {
             if (key != currentUid) {
+              final ls = lastSeenMap[key];
+              DateTime? seenDate;
+              if (ls is Timestamp) {
+                seenDate = ls.toDate();
+                if (_otherLastSeen == null || seenDate.isAfter(_otherLastSeen!)) {
+                  _otherLastSeen = seenDate;
+                }
+              }
+
               if (value == true) {
-                _isOtherOnline = true;
-              } else {
-                final ls = lastSeenMap[key];
-                if (ls is Timestamp) {
-                  final seenDate = ls.toDate();
-                  if (_otherLastSeen == null || seenDate.isAfter(_otherLastSeen!)) {
-                    _otherLastSeen = seenDate;
-                  }
+                if (seenDate != null && now.difference(seenDate).abs().inSeconds <= 75) {
+                  _isOtherOnline = true;
                 }
               }
             }
           });
 
-          final oldTyping = _isOtherTyping;
           bool newTyping = false;
           typing.forEach((key, value) {
             if (key != currentUid && value == true) {
@@ -596,7 +616,9 @@ class ChatProvider extends ChangeNotifier {
           });
           _isOtherTyping = newTyping;
 
-          if (oldTyping != newTyping) {
+          if (oldOnline != _isOtherOnline ||
+              oldTyping != _isOtherTyping ||
+              oldLastSeen != _otherLastSeen) {
             notifyListeners();
           }
         }
@@ -695,6 +717,12 @@ class ChatProvider extends ChangeNotifier {
   void setUserInChat(bool value) {
     _isUserInChatScreen = value;
     NotificationService.setActiveChatRoom(_roomCode, inChat: value);
+    if (!value) {
+      updatePresence(false);
+      updateTyping(false);
+    } else {
+      updatePresence(true);
+    }
 
     if (value && _roomCode != null) {
       final currentUid = _repository.currentUserId;
@@ -713,6 +741,8 @@ class ChatProvider extends ChangeNotifier {
 
   void leaveRoom() {
     _isUserInChatScreen = false;
+    _presenceCheckTimer?.cancel();
+    _presenceCheckTimer = null;
     updatePresence(false);
     updateTyping(false);
     NotificationService.setActiveChatRoom(null, inChat: false);
@@ -791,6 +821,8 @@ class ChatProvider extends ChangeNotifier {
 
   @override
   void dispose() {
+    _presenceCheckTimer?.cancel();
+    _presenceCheckTimer = null;
     updatePresence(false);
     updateTyping(false);
     _messagesSubscription?.cancel();

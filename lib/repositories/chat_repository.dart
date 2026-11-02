@@ -242,6 +242,7 @@ class ChatRepository {
         'members': [uid],
         'roomCode': roomCode,
         'presence': {uid: true},
+        'lastSeen': {uid: FieldValue.serverTimestamp()},
         'createdAt': FieldValue.serverTimestamp(),
         'lastMessageTime': FieldValue.serverTimestamp(),
         'lastMessage': strings.roomCreatedPreview,
@@ -260,6 +261,7 @@ class ChatRepository {
         'members': FieldValue.arrayUnion([uid]),
         'roomCode': roomCode,
         'presence.$uid': true,
+        'lastSeen.$uid': FieldValue.serverTimestamp(),
       };
       if (token != null) updates['fcmTokens.$uid'] = token;
 
@@ -898,7 +900,7 @@ class ChatRepository {
     try {
       await _firestore.collection('rooms').doc(roomId).update({
         'presence.$uid': isOnline,
-        if (!isOnline) 'lastSeen.$uid': FieldValue.serverTimestamp(),
+        'lastSeen.$uid': FieldValue.serverTimestamp(),
       });
     } catch (e) {
       // Document might not exist if they leave before creating properly, ignore.
