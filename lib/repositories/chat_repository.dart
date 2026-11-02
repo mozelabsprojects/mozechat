@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
@@ -932,9 +933,49 @@ class ChatRepository {
             .doc(roomId)
             .collection('messages')
             .doc(id);
-        batch.update(ref, {'status': status});
+        batch.update(ref, {
+          'status': status,
+          if (status == 'delivered') 'deliveredAt': FieldValue.serverTimestamp(),
+          if (status == 'read') 'readAt': FieldValue.serverTimestamp(),
+        });
       }
       await batch.commit().catchError((_) {});
+    }
+  }
+
+  Future<void> markPendingMessagesAsDelivered() async {
+    final uid = currentUserId;
+    if (uid == null) return;
+    try {
+      final history = await PreferencesService.getRoomHistory();
+      for (final code in history) {
+        final roomId = CryptoService.deriveRoomId(code);
+        final snap = await _firestore
+            .collection('rooms')
+            .doc(roomId)
+            .collection('messages')
+            .where('status', isEqualTo: 'sent')
+            .limit(30)
+            .get();
+        if (snap.docs.isEmpty) continue;
+        final batch = _firestore.batch();
+        int count = 0;
+        for (final doc in snap.docs) {
+          final data = doc.data();
+          if (data['senderId'] != uid) {
+            batch.update(doc.reference, {
+              'status': 'delivered',
+              'deliveredAt': FieldValue.serverTimestamp(),
+            });
+            count++;
+          }
+        }
+        if (count > 0) {
+          await batch.commit().catchError((_) {});
+        }
+      }
+    } catch (e) {
+      debugPrint('markPendingMessagesAsDelivered warning: $e');
     }
   }
 }

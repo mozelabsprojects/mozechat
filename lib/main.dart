@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_auth/firebase_auth.dart';
@@ -40,8 +41,44 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
   if (message.data['type'] == 'NEW_MESSAGE') {
     final roomId = message.data['roomId'] as String?;
+    final messageId = message.data['messageId'] as String?;
+    final senderId = message.data['senderId'] as String?;
     final cipherText = message.data['cipherText'] as String?;
     final iv = message.data['iv'] as String?;
+
+    var uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid == null) {
+      try {
+        await FirebaseAuth.instance.authStateChanges().first;
+        uid = FirebaseAuth.instance.currentUser?.uid;
+      } catch (_) {}
+    }
+
+    if (uid != null && senderId != null && senderId == uid) {
+      return;
+    }
+
+    // Acknowledge delivery to Firestore immediately upon receiving message on recipient device
+    if (messageId != null && roomId != null && (senderId == null || senderId != uid)) {
+      try {
+        final msgRef = FirebaseFirestore.instance
+            .collection('rooms')
+            .doc(roomId)
+            .collection('messages')
+            .doc(messageId);
+        unawaited(msgRef.get().then((docSnap) {
+          if (docSnap.exists) {
+            final currentStatus = docSnap.data()?['status'] as String?;
+            if (currentStatus == 'sent') {
+              return msgRef.update({
+                'status': 'delivered',
+                'deliveredAt': FieldValue.serverTimestamp(),
+              });
+            }
+          }
+        }).catchError((_) {}));
+      } catch (_) {}
+    }
 
     // Suppress immediately if user is currently viewing this room in ChatScreen
     if (NotificationService.shouldSuppressNotification(roomId: roomId)) {
@@ -351,6 +388,7 @@ class _MozechatAppState extends State<MozechatApp> with WidgetsBindingObserver {
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       CallkitService().checkActiveCallsAndJoinIfNeeded();
+      unawaited(ChatRepository().markPendingMessagesAsDelivered());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive ||
         state == AppLifecycleState.hidden ||
@@ -390,6 +428,8 @@ class _MozechatAppState extends State<MozechatApp> with WidgetsBindingObserver {
       } catch (e) {
         debugPrint('FCM update in init route error: $e');
       }
+
+      unawaited(ChatRepository().markPendingMessagesAsDelivered());
 
       if (!mounted) return;
       if (widget.initialRoom != null) {

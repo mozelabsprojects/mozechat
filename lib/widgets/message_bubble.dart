@@ -111,10 +111,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
 
     switch (widget.msg.status) {
       case 'pending':
-        statusWidget = Icon(
+        statusWidget = const Icon(
           Icons.access_time_rounded,
           size: 11,
-          color: widget.textColor.withValues(alpha: 0.5),
+          color: Color(0xFF9E9E9E),
         );
         break;
       case 'failed':
@@ -125,20 +125,23 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         );
         break;
       case 'sent':
-        statusWidget = Icon(
+        // WhatsApp single gray tick
+        statusWidget = const Icon(
           Icons.check_rounded,
-          size: 14,
-          color: widget.textColor.withValues(alpha: 0.6),
+          size: 15,
+          color: Color(0xFF9E9E9E),
         );
         break;
       case 'delivered':
-        statusWidget = Icon(
+        // WhatsApp double gray tick
+        statusWidget = const Icon(
           Icons.done_all_rounded,
-          size: 14,
-          color: widget.textColor.withValues(alpha: 0.6),
+          size: 15,
+          color: Color(0xFF9E9E9E),
         );
         break;
       case 'read':
+        // WhatsApp double blue/cyan tick
         statusWidget = Row(
           mainAxisSize: MainAxisSize.min,
           children: [
@@ -156,7 +159,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               ),
             const Icon(
               Icons.done_all_rounded,
-              size: 14,
+              size: 15,
               color: Colors.cyanAccent,
               shadows: [Shadow(color: Colors.cyanAccent, blurRadius: 8)],
             ),
@@ -164,10 +167,10 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         );
         break;
       default:
-        statusWidget = Icon(
+        statusWidget = const Icon(
           Icons.check_rounded,
-          size: 14,
-          color: widget.textColor.withValues(alpha: 0.6),
+          size: 15,
+          color: Color(0xFF9E9E9E),
         );
     }
 

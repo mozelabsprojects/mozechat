@@ -16,6 +16,7 @@ import '../widgets/cyber_hud.dart';
 import '../services/crypto_service.dart';
 import '../services/preferences_service.dart';
 import '../services/update_service.dart';
+import '../repositories/chat_repository.dart';
 import '../providers/chat_provider.dart';
 import '../providers/locale_provider.dart';
 import 'login_screen.dart';
@@ -87,6 +88,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
   void initState() {
     super.initState();
     _loadLocalSettings();
+    unawaited(ChatRepository().markPendingMessagesAsDelivered());
     WidgetsBinding.instance.addPostFrameCallback((_) {
       UpdateService().checkUpdateOnStartup(context);
     });

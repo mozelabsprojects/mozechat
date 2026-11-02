@@ -1,7 +1,7 @@
 {
-  "version": "0.1.4",
-  "versionCode": 5,
+  "version": "0.2.0",
+  "versionCode": 6,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 📞 Aranan kişinin (Callee) 'Katıl / Kabul Et' dediğinde arama ekranının (CallScreen) kapanması/gözükmemesi yarış durumu (CallKit endAllCalls -> CallEnded race condition) tamamen giderildi\n• 🔔 Bildirimler WhatsApp mantığıyla sadeleştirildi: Çoklu/mükerrer arama ve mesaj bildirimleri kaldırıldı; aktif sohbetteyken yalnızca üst arama barı, sohbet dışındayken tekil arama bildirimi gösteriliyor\n• ⚡ CallKit activeCalls() tip dönüşümü ve arka plandan kabul edildiğinde doğrudan CallScreen açılışı düzeltildi",
+  "changelog": "• 💬 WhatsApp tarzı çift gri iletildi (delivered) tiki eklendi: Alıcı cihaz internete bağlı olup mesajı aldığında anında çift gri tik olur\n• 👁️ Mesaj açılıp okunduğunda çift mavi/cyan tike dönüşür\n• ⚡ İnternet ve arka plan teslimat bildirimleri optimize edildi",
   "forceUpdate": false
 }
