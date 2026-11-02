@@ -320,12 +320,8 @@ void main() async {
       cacheSizeBytes: Settings.CACHE_SIZE_UNLIMITED,
     );
 
-    final nickname = await PreferencesService.getNickname();
-    final lastActiveRoom = await PreferencesService.getLastActiveRoom();
-    if (nickname != null && lastActiveRoom != null) {
-      initialRoom = lastActiveRoom;
-    }
-
+    // Note: Always start at RoomsListScreen on normal app launch as requested.
+    // initialRoom is only set if launched directly from a notification tap.
     final launchPayload = await NotificationService.getInitialNotificationPayload();
     if (launchPayload != null &&
         launchPayload.isNotEmpty &&

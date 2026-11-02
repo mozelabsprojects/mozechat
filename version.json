@@ -1,7 +1,7 @@
 {
-  "version": "0.2.0",
-  "versionCode": 6,
+  "version": "0.2.1",
+  "versionCode": 7,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 💬 WhatsApp tarzı çift gri iletildi (delivered) tiki eklendi: Alıcı cihaz internete bağlı olup mesajı aldığında anında çift gri tik olur\n• 👁️ Mesaj açılıp okunduğunda çift mavi/cyan tike dönüşür\n• ⚡ İnternet ve arka plan teslimat bildirimleri optimize edildi",
+  "changelog": "• 🔑 Kalıcı keystore anahtarı ile paket çakışması (imza uyuşmazlığı) çözüldü\n• 🏠 Uygulama açılışında direkt sohbet ekranına girmesi engellendi; ana sohbet listesi ekranına geçiş sağlandı\n• 🔴 Sohbetler listesinde yeni mesajı olan odalara kırmızı okunmamış mesaj bildirim ikonu (1-99) eklendi\n• 💬 WhatsApp tarzı çift gri iletildi (delivered) tiki ve çift mavi okundu tiki optimize edildi",
   "forceUpdate": false
 }

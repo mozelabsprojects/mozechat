@@ -34,9 +34,9 @@ android {
             val keystoreFile = file("release.keystore")
             if (keystoreFile.exists()) {
                 storeFile = keystoreFile
-                storePassword = "mozechat2026"
-                keyAlias = "mozechat"
-                keyPassword = "mozechat2026"
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
             } else {
                 val debugKeystore = signingConfigs.getByName("debug")
                 storeFile = debugKeystore.storeFile

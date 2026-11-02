@@ -1318,6 +1318,7 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                         child: Row(
                           children: [
                             Stack(
+                              clipBehavior: Clip.none,
                               children: [
                                 Container(
                                   width: 46,
@@ -1359,6 +1360,10 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                                       size: 10,
                                     ),
                                   ),
+                                ),
+                                _RoomAvatarUnreadBadge(
+                                  roomId: doc.id,
+                                  currentUid: currentUser.uid,
                                 ),
                               ],
                             ),
@@ -1424,36 +1429,13 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                                       color: accentColor,
                                     ),
                                   )
-                                else if (isPinned)
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: accentColor.withValues(alpha: 0.15),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Text(
-                                      strings.pinnedBadge,
-                                      style: TextStyle(color: accentColor, fontSize: 9, fontWeight: FontWeight.bold),
-                                    ),
-                                  )
                                 else
-                                  Row(
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Icon(
-                                        Icons.people_outline,
-                                        size: 12,
-                                        color: accentColor.withValues(alpha: 0.3),
-                                      ),
-                                      const SizedBox(width: 4),
-                                      Text(
-                                        '${room.members.length}',
-                                        style: TextStyle(
-                                          color: accentColor.withValues(alpha: 0.3),
-                                          fontSize: 11,
-                                        ),
-                                      ),
-                                    ],
+                                  _RoomTrailingStatus(
+                                    roomId: doc.id,
+                                    currentUid: currentUser.uid,
+                                    isPinned: isPinned,
+                                    accentColor: accentColor,
+                                    memberCount: room.members.length,
                                   ),
                               ],
                             ),
@@ -1468,6 +1450,185 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
           );
         },
       ),
+    );
+  }
+}
+
+class _RoomAvatarUnreadBadge extends StatelessWidget {
+  final String roomId;
+  final String currentUid;
+
+  const _RoomAvatarUnreadBadge({
+    required this.roomId,
+    required this.currentUid,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('rooms')
+          .doc(roomId)
+          .collection('messages')
+          .where('status', whereIn: const ['sent', 'delivered'])
+          .limit(10)
+          .snapshots(),
+      builder: (context, snapshot) {
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const SizedBox.shrink();
+        }
+        final hasUnread = snapshot.data!.docs.any((d) {
+          final data = d.data() as Map<String, dynamic>;
+          final senderId = data['senderId'] as String?;
+          final isDeleted = (data['isDeleted'] as bool?) ?? false;
+          return senderId != null && senderId != currentUid && !isDeleted;
+        });
+
+        if (!hasUnread) return const SizedBox.shrink();
+
+        return Positioned(
+          top: -2,
+          right: -2,
+          child: Container(
+            width: 10,
+            height: 10,
+            decoration: BoxDecoration(
+              color: const Color(0xFFE53935),
+              shape: BoxShape.circle,
+              border: Border.all(color: const Color(0xFF101216), width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color(0xFFE53935).withValues(alpha: 0.6),
+                  blurRadius: 4,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class _RoomTrailingStatus extends StatelessWidget {
+  final String roomId;
+  final String currentUid;
+  final bool isPinned;
+  final Color accentColor;
+  final int memberCount;
+
+  const _RoomTrailingStatus({
+    required this.roomId,
+    required this.currentUid,
+    required this.isPinned,
+    required this.accentColor,
+    required this.memberCount,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final strings = context.read<LocaleProvider>().strings;
+    return StreamBuilder<QuerySnapshot>(
+      stream: FirebaseFirestore.instance
+          .collection('rooms')
+          .doc(roomId)
+          .collection('messages')
+          .where('status', whereIn: const ['sent', 'delivered'])
+          .limit(100)
+          .snapshots(),
+      builder: (context, snapshot) {
+        int unreadCount = 0;
+        if (snapshot.hasData && snapshot.data!.docs.isNotEmpty) {
+          unreadCount = snapshot.data!.docs.where((d) {
+            final data = d.data() as Map<String, dynamic>;
+            final senderId = data['senderId'] as String?;
+            final isDeleted = (data['isDeleted'] as bool?) ?? false;
+            return senderId != null && senderId != currentUid && !isDeleted;
+          }).length;
+        }
+
+        if (unreadCount > 0) {
+          final displayText = unreadCount > 99 ? '99+' : '$unreadCount';
+          return Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isPinned) ...[
+                Icon(
+                  Icons.push_pin_rounded,
+                  size: 12,
+                  color: accentColor.withValues(alpha: 0.6),
+                ),
+                const SizedBox(width: 4),
+              ],
+              Container(
+                constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
+                padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFE53935),
+                  borderRadius: BorderRadius.circular(10),
+                  boxShadow: [
+                    BoxShadow(
+                      color: const Color(0xFFE53935).withValues(alpha: 0.5),
+                      blurRadius: 6,
+                      spreadRadius: 1,
+                    ),
+                  ],
+                ),
+                child: Center(
+                  child: Text(
+                    displayText,
+                    textAlign: TextAlign.center,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 10.5,
+                      fontWeight: FontWeight.bold,
+                      height: 1.1,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          );
+        }
+
+        if (isPinned) {
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: 0.15),
+              borderRadius: BorderRadius.circular(4),
+            ),
+            child: Text(
+              strings.pinnedBadge,
+              style: TextStyle(
+                color: accentColor,
+                fontSize: 9,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+          );
+        }
+
+        return Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.people_outline,
+              size: 12,
+              color: accentColor.withValues(alpha: 0.3),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              '$memberCount',
+              style: TextStyle(
+                color: accentColor.withValues(alpha: 0.3),
+                fontSize: 11,
+              ),
+            ),
+          ],
+        );
+      },
     );
   }
 }
