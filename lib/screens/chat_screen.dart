@@ -45,6 +45,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
   final ScrollController _scrollController = ScrollController();
   bool _showScrollToBottom = false;
 
+  // In-Chat Search state
+  bool _isSearchMode = false;
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
+  final List<int> _matchedIndices = [];
+  int _currentMatchIndex = 0;
+  String? _highlightedMessageId;
+  Timer? _highlightTimer;
+
   @override
   void initState() {
     super.initState();
@@ -106,6 +115,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _highlightTimer?.cancel();
+    _searchController.dispose();
     _presenceHeartbeatTimer?.cancel();
     _presenceHeartbeatTimer = null;
     _chatProvider?.updatePresence(false);
@@ -369,6 +380,187 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
     return const SizedBox.shrink();
   }
 
+  void _startSearch() {
+    setState(() {
+      _isSearchMode = true;
+      _searchQuery = '';
+      _searchController.clear();
+      _matchedIndices.clear();
+      _currentMatchIndex = 0;
+    });
+  }
+
+  void _closeSearch() {
+    _highlightTimer?.cancel();
+    setState(() {
+      _isSearchMode = false;
+      _searchQuery = '';
+      _searchController.clear();
+      _matchedIndices.clear();
+      _currentMatchIndex = 0;
+      _highlightedMessageId = null;
+    });
+  }
+
+  void _onSearchChanged(String query) {
+    final q = query.trim().toLowerCase();
+    final msgs = context.read<ChatProvider>().messages;
+    final matches = <int>[];
+    if (q.isNotEmpty) {
+      for (int i = 0; i < msgs.length; i++) {
+        final m = msgs[i];
+        if (!m.isDeleted && m.type == 'text' && m.text.toLowerCase().contains(q)) {
+          matches.add(i);
+        }
+      }
+    }
+    setState(() {
+      _searchQuery = query;
+      _matchedIndices.clear();
+      _matchedIndices.addAll(matches);
+      _currentMatchIndex = 0;
+    });
+    if (_matchedIndices.isNotEmpty) {
+      _scrollToMatch(0);
+    }
+  }
+
+  void _nextMatch() {
+    if (_matchedIndices.isEmpty) return;
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex + 1) % _matchedIndices.length;
+    });
+    _scrollToMatch(_currentMatchIndex);
+  }
+
+  void _prevMatch() {
+    if (_matchedIndices.isEmpty) return;
+    setState(() {
+      _currentMatchIndex = (_currentMatchIndex - 1 + _matchedIndices.length) % _matchedIndices.length;
+    });
+    _scrollToMatch(_currentMatchIndex);
+  }
+
+  void _scrollToMatch(int matchIdx) {
+    if (matchIdx < 0 || matchIdx >= _matchedIndices.length) return;
+    final msgIndex = _matchedIndices[matchIdx];
+    final msgs = context.read<ChatProvider>().messages;
+    if (msgIndex < msgs.length) {
+      _highlightAndScrollToMessage(msgs[msgIndex].id, msgIndex);
+    }
+  }
+
+  void _highlightAndScrollToMessage(String msgId, int msgIndex) {
+    _highlightTimer?.cancel();
+    setState(() {
+      _highlightedMessageId = msgId;
+    });
+
+    if (_scrollController.hasClients) {
+      final maxScroll = _scrollController.position.maxScrollExtent;
+      final targetOffset = (msgIndex * 72.0).clamp(0.0, maxScroll);
+      _scrollController.animateTo(
+        targetOffset,
+        duration: const Duration(milliseconds: 320),
+        curve: Curves.easeOutCubic,
+      );
+    }
+
+    _highlightTimer = Timer(const Duration(milliseconds: 2500), () {
+      if (mounted) {
+        setState(() => _highlightedMessageId = null);
+      }
+    });
+  }
+
+  Widget _buildPinnedMessageBanner(
+    BuildContext context,
+    ChatProvider chatProvider,
+    AppStrings strings,
+  ) {
+    if (!chatProvider.hasPinnedMessage) return const SizedBox.shrink();
+
+    final pinnedId = chatProvider.pinnedMessageId;
+    final pinnedText = chatProvider.pinnedMessageText ?? strings.pinnedMessage;
+    final sender = chatProvider.pinnedMessageSender;
+
+    return Material(
+      color: Theme.of(context).cardColor.withValues(alpha: 0.95),
+      child: InkWell(
+        onTap: () {
+          if (pinnedId != null) {
+            final idx = chatProvider.messages.indexWhere((m) => m.id == pinnedId);
+            if (idx != -1) {
+              _highlightAndScrollToMessage(pinnedId, idx);
+            }
+          }
+        },
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            border: Border(
+              left: const BorderSide(
+                color: Color(0xFF159D87),
+                width: 3.5,
+              ),
+              bottom: BorderSide(
+                color: Colors.white.withValues(alpha: 0.08),
+                width: 1,
+              ),
+            ),
+          ),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.push_pin_rounded,
+                color: Color(0xFF159D87),
+                size: 18,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      (sender != null && sender.isNotEmpty)
+                          ? strings.pinnedBy(sender)
+                          : strings.pinnedMessage,
+                      style: const TextStyle(
+                        color: Color(0xFF159D87),
+                        fontWeight: FontWeight.bold,
+                        fontSize: 11,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      pinnedText,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 13,
+                        fontWeight: FontWeight.w500,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                icon: const Icon(Icons.close_rounded, size: 18, color: Colors.white60),
+                visualDensity: VisualDensity.compact,
+                tooltip: strings.unpinMessage,
+                onPressed: () {
+                  chatProvider.unpinMessage();
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   void _showMessageOptions(BuildContext context, dynamic msg, bool isMe) {
     final strings = context.read<LocaleProvider>().strings;
 
@@ -449,6 +641,29 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     msg.id,
                     !msg.isStarred,
                   );
+                },
+              ),
+              ListTile(
+                leading: Icon(
+                  context.read<ChatProvider>().pinnedMessageId == msg.id
+                      ? Icons.push_pin_outlined
+                      : Icons.push_pin_rounded,
+                  color: const Color(0xFF159D87),
+                ),
+                title: Text(
+                  context.read<ChatProvider>().pinnedMessageId == msg.id
+                      ? strings.unpinMessage
+                      : strings.pinMessage,
+                  style: const TextStyle(color: Colors.white),
+                ),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  final cp = context.read<ChatProvider>();
+                  if (cp.pinnedMessageId == msg.id) {
+                    cp.unpinMessage();
+                  } else {
+                    cp.pinMessage(msg);
+                  }
                 },
               ),
               if (isMe && msg.type == 'text')
@@ -843,6 +1058,15 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
         onClearSelection: () => setState(() => _selectedMessages.clear()),
         onShowSettings: () => _showSettingsMenu(context),
         onCopyCode: _copyCode,
+        isSearchMode: _isSearchMode,
+        searchController: _searchController,
+        onSearchChanged: _onSearchChanged,
+        onStartSearch: _startSearch,
+        onCloseSearch: _closeSearch,
+        searchMatchCount: _matchedIndices.length,
+        currentMatchIndex: _currentMatchIndex,
+        onNextMatch: _nextMatch,
+        onPrevMatch: _prevMatch,
       ),
       body: Stack(
         alignment: Alignment.topCenter,
@@ -861,6 +1085,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
               children: [
                 const SystemStatusBanner(),
                 _buildWhatsAppCallBanner(context, callProvider, strings),
+                _buildPinnedMessageBanner(context, chatProvider, strings),
                 Expanded(
                   child: chatProvider.isLoading && chatProvider.messages.isEmpty
                       ? Center(
@@ -955,6 +1180,8 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                                 showDateDivider: showDateDivider,
                                 isSelected: _selectedMessages.contains(msg.id),
                                 isSelectionMode: _selectedMessages.isNotEmpty,
+                                searchQuery: _isSearchMode ? _searchQuery : null,
+                                isHighlighted: _highlightedMessageId == msg.id,
                                 onToggleSelection: () {
                                   setState(() {
                                     if (_selectedMessages.contains(msg.id)) {

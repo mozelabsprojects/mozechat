@@ -978,4 +978,35 @@ class ChatRepository {
       debugPrint('markPendingMessagesAsDelivered warning: $e');
     }
   }
+
+  /// Pin a message to the top of the room
+  Future<void> pinMessage(
+    String roomCode, {
+    required String messageId,
+    required String text,
+    required String sender,
+  }) async {
+    final roomId = CryptoService.deriveRoomId(roomCode);
+    await _firestore.collection('rooms').doc(roomId).update({
+      'pinnedMessageId': messageId,
+      'pinnedMessageText': text,
+      'pinnedMessageSender': sender,
+      'pinnedAt': FieldValue.serverTimestamp(),
+    }).catchError((e) {
+      debugPrint('pinMessage error: $e');
+    });
+  }
+
+  /// Remove pinned message from room
+  Future<void> unpinMessage(String roomCode) async {
+    final roomId = CryptoService.deriveRoomId(roomCode);
+    await _firestore.collection('rooms').doc(roomId).update({
+      'pinnedMessageId': FieldValue.delete(),
+      'pinnedMessageText': FieldValue.delete(),
+      'pinnedMessageSender': FieldValue.delete(),
+      'pinnedAt': FieldValue.delete(),
+    }).catchError((e) {
+      debugPrint('unpinMessage error: $e');
+    });
+  }
 }

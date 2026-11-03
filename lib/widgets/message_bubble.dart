@@ -25,6 +25,8 @@ class MessageBubble extends StatefulWidget {
   final Color appBgColor;
   final String? replyText;
   final VoidCallback? onRetry;
+  final String? searchQuery;
+  final bool isHighlighted;
 
   const MessageBubble({
     super.key,
@@ -37,6 +39,8 @@ class MessageBubble extends StatefulWidget {
     required this.appBgColor,
     this.replyText,
     this.onRetry,
+    this.searchQuery,
+    this.isHighlighted = false,
   });
 
   @override
@@ -189,11 +193,17 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
     final strings = context.watch<LocaleProvider>().strings;
     final timeString = DateFormat('HH:mm').format(widget.msg.timestamp);
     final isBurn = widget.msg.metadata?['burnAfterRead'] == true && !widget.msg.isDeleted;
+    final isHighlighted = widget.isHighlighted;
     final bgColor = isBurn ? Colors.orangeAccent.withValues(alpha: 0.1) : widget.currentBg;
-    final bdrColor = isBurn ? Colors.orangeAccent : widget.borderColor;
-    final shadowColor = isBurn
-        ? Colors.orangeAccent.withValues(alpha: 0.4)
-        : widget.borderColor.withValues(alpha: 0.2);
+    final bdrColor = isHighlighted
+        ? const Color(0xFF159D87)
+        : (isBurn ? Colors.orangeAccent : widget.borderColor);
+    final bdrWidth = isHighlighted ? 2.5 : 1.5;
+    final shadowColor = isHighlighted
+        ? const Color(0xFF159D87).withValues(alpha: 0.6)
+        : (isBurn
+            ? Colors.orangeAccent.withValues(alpha: 0.4)
+            : widget.borderColor.withValues(alpha: 0.2));
 
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
@@ -223,13 +233,13 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                     bottomLeft: const Radius.circular(16),
                     bottomRight: widget.isMe ? const Radius.circular(4) : const Radius.circular(16),
                   ),
-                  border: Border.all(color: bdrColor, width: 1.5),
+                  border: Border.all(color: bdrColor, width: bdrWidth),
                   color: bgColor,
                   boxShadow: [
                     BoxShadow(
                       color: shadowColor,
-                      blurRadius: isBurn ? 20 : 10,
-                      spreadRadius: isBurn ? 2 : 1,
+                      blurRadius: isHighlighted ? 18 : (isBurn ? 20 : 10),
+                      spreadRadius: isHighlighted ? 2.5 : (isBurn ? 2 : 1),
                     ),
                   ],
                 ),
@@ -740,6 +750,13 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
       } else if (displayText == '[Encrypted Message]' || displayText == '[Şifreli Mesaj]') {
         displayText = strings.encryptedMessageFallback;
       }
+
+      if (widget.searchQuery != null &&
+          widget.searchQuery!.trim().isNotEmpty &&
+          displayText.toLowerCase().contains(widget.searchQuery!.toLowerCase())) {
+        return _buildHighlightedText(displayText, widget.searchQuery!.trim());
+      }
+
       return Text(
         displayText,
         style: TextStyle(
@@ -748,6 +765,60 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         ),
       );
     }
+  }
+
+  Widget _buildHighlightedText(String text, String query) {
+    final lowerText = text.toLowerCase();
+    final lowerQuery = query.toLowerCase();
+    final List<InlineSpan> spans = [];
+    int start = 0;
+
+    while (true) {
+      final index = lowerText.indexOf(lowerQuery, start);
+      if (index == -1) {
+        if (start < text.length) {
+          spans.add(TextSpan(
+            text: text.substring(start),
+            style: TextStyle(fontSize: 16, color: widget.textColor),
+          ));
+        }
+        break;
+      }
+
+      if (index > start) {
+        spans.add(TextSpan(
+          text: text.substring(start, index),
+          style: TextStyle(fontSize: 16, color: widget.textColor),
+        ));
+      }
+
+      spans.add(WidgetSpan(
+        alignment: PlaceholderAlignment.middle,
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 1),
+          decoration: BoxDecoration(
+            color: const Color(0xFF159D87).withValues(alpha: 0.35),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: const Color(0xFF159D87),
+              width: 1,
+            ),
+          ),
+          child: Text(
+            text.substring(index, index + query.length),
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+              color: Color(0xFF159D87),
+            ),
+          ),
+        ),
+      ));
+
+      start = index + query.length;
+    }
+
+    return Text.rich(TextSpan(children: spans));
   }
 
   Widget _buildMediaGrid(BuildContext context, List<Map<String, dynamic>> mediaList) {

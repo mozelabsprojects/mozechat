@@ -18,6 +18,8 @@ class ChatMessageItem extends StatelessWidget {
   final bool isSelectionMode;
   final VoidCallback onToggleSelection;
   final VoidCallback onLongPress;
+  final String? searchQuery;
+  final bool isHighlighted;
 
   const ChatMessageItem({
     super.key,
@@ -27,6 +29,8 @@ class ChatMessageItem extends StatelessWidget {
     required this.isSelectionMode,
     required this.onToggleSelection,
     required this.onLongPress,
+    this.searchQuery,
+    this.isHighlighted = false,
   });
 
   String? _getReplyText(BuildContext context, String replyId) {
@@ -72,6 +76,8 @@ class ChatMessageItem extends StatelessWidget {
       textColor: textColor,
       borderColor: isMe ? senderBorder : receiverBorder,
       appBgColor: appBgColor,
+      searchQuery: searchQuery,
+      isHighlighted: isHighlighted,
       replyText: msg.replyToMessageId != null ? _getReplyText(context, msg.replyToMessageId!) : null,
       onRetry: msg.status == 'failed' && msg.localId != null
           ? () {

@@ -12,6 +12,10 @@ class RoomModel {
   final List<String> members;
   final String encryptionKey; // Deprecated but kept for fallback
   final Map<String, String>? encryptedKeys; // For E2EE mapping
+  final String? pinnedMessageId;
+  final String? pinnedMessageText;
+  final String? pinnedMessageSender;
+  final DateTime? pinnedAt;
 
   RoomModel({
     required this.roomId,
@@ -25,6 +29,10 @@ class RoomModel {
     required this.members,
     required this.encryptionKey,
     this.encryptedKeys,
+    this.pinnedMessageId,
+    this.pinnedMessageText,
+    this.pinnedMessageSender,
+    this.pinnedAt,
   });
 
   factory RoomModel.fromMap(Map<String, dynamic> data) {
@@ -42,6 +50,10 @@ class RoomModel {
       encryptedKeys: data['encryptedKeys'] != null
           ? Map<String, String>.from(data['encryptedKeys'])
           : null,
+      pinnedMessageId: data['pinnedMessageId'] as String?,
+      pinnedMessageText: data['pinnedMessageText'] as String?,
+      pinnedMessageSender: data['pinnedMessageSender'] as String?,
+      pinnedAt: (data['pinnedAt'] as Timestamp?)?.toDate(),
     );
   }
 
@@ -58,6 +70,10 @@ class RoomModel {
       'members': members,
       'encryptionKey': encryptionKey,
       'encryptedKeys': encryptedKeys,
+      'pinnedMessageId': pinnedMessageId,
+      'pinnedMessageText': pinnedMessageText,
+      'pinnedMessageSender': pinnedMessageSender,
+      'pinnedAt': pinnedAt != null ? Timestamp.fromDate(pinnedAt!) : null,
     };
   }
 }

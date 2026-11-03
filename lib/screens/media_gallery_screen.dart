@@ -1,9 +1,12 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:intl/intl.dart';
+import '../models/message.dart';
 import '../providers/chat_provider.dart';
 import '../providers/theme_provider.dart';
 import '../providers/locale_provider.dart';
+import '../widgets/audio_bubble.dart';
 import 'photo_view_gallery_screen.dart';
 import 'video_player_screen.dart';
 
@@ -31,6 +34,7 @@ class MediaGalleryScreen extends StatelessWidget {
     final strings = context.watch<LocaleProvider>().strings;
 
     final List<GalleryItem> allMedia = [];
+    final List<Message> audioMessages = [];
 
     for (var msg in chatProvider.messages) {
       if (msg.isDeleted) continue;
@@ -62,6 +66,8 @@ class MediaGalleryScreen extends StatelessWidget {
             );
           }
         }
+      } else if (msg.type == 'audio' && msg.mediaUrl != null && msg.mediaUrl!.isNotEmpty) {
+        audioMessages.add(msg);
       }
     }
 
@@ -69,7 +75,7 @@ class MediaGalleryScreen extends StatelessWidget {
     final videos = allMedia.where((m) => m.type == 'video').toList();
 
     return DefaultTabController(
-      length: 3,
+      length: 4,
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
@@ -80,13 +86,16 @@ class MediaGalleryScreen extends StatelessWidget {
           backgroundColor: Colors.transparent,
           elevation: 0,
           bottom: TabBar(
+            isScrollable: true,
+            tabAlignment: TabAlignment.start,
             indicatorColor: themeProvider.accentColor,
             labelColor: themeProvider.accentColor,
             unselectedLabelColor: Colors.grey,
             tabs: [
-              Tab(text: strings.allTab),
-              Tab(text: strings.photosTab),
-              Tab(text: strings.videosTab),
+              Tab(text: '${strings.allTab} (${allMedia.length})'),
+              Tab(text: '${strings.photosTab} (${photos.length})'),
+              Tab(text: '${strings.videosTab} (${videos.length})'),
+              Tab(text: '${strings.audiosTab} (${audioMessages.length})'),
             ],
           ),
         ),
@@ -95,6 +104,7 @@ class MediaGalleryScreen extends StatelessWidget {
             _buildGrid(context, allMedia, themeProvider),
             _buildGrid(context, photos, themeProvider),
             _buildGrid(context, videos, themeProvider),
+            _buildAudiosList(context, audioMessages, chatProvider, themeProvider),
           ],
         ),
       ),
@@ -107,7 +117,7 @@ class MediaGalleryScreen extends StatelessWidget {
       return Center(
         child: Text(
           strings.noMediaFound,
-          style: TextStyle(color: themeProvider.accentColor, fontSize: 18),
+          style: TextStyle(color: themeProvider.accentColor, fontSize: 16),
         ),
       );
     }
@@ -171,7 +181,8 @@ class MediaGalleryScreen extends StatelessWidget {
                   placeholder: (context, url) => Center(
                     child: CircularProgressIndicator(color: themeProvider.accentColor),
                   ),
-                  errorWidget: (context, url, error) => const Icon(Icons.broken_image, color: Colors.red),
+                  errorWidget: (context, url, error) =>
+                      const Icon(Icons.broken_image, color: Colors.red),
                 ),
                 if (item.type == 'video')
                   const Center(
@@ -179,6 +190,102 @@ class MediaGalleryScreen extends StatelessWidget {
                   ),
               ],
             ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildAudiosList(
+    BuildContext context,
+    List<Message> audioMessages,
+    ChatProvider chatProvider,
+    ThemeProvider themeProvider,
+  ) {
+    final strings = context.watch<LocaleProvider>().strings;
+    if (audioMessages.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.mic_none_rounded,
+              size: 48,
+              color: themeProvider.accentColor.withValues(alpha: 0.5),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              strings.noAudioFound,
+              style: TextStyle(color: themeProvider.accentColor, fontSize: 16),
+            ),
+          ],
+        ),
+      );
+    }
+
+    return ListView.separated(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      itemCount: audioMessages.length,
+      separatorBuilder: (_, _) => const SizedBox(height: 10),
+      itemBuilder: (context, index) {
+        final msg = audioMessages[index];
+        final isMe = msg.senderId == chatProvider.currentUserId;
+        final timeStr = DateFormat('MMM d, HH:mm').format(msg.timestamp);
+
+        return Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: const Color(0xFF161F28),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(
+              color: isMe
+                  ? themeProvider.accentColor.withValues(alpha: 0.35)
+                  : Colors.white12,
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.mic_rounded,
+                        size: 16,
+                        color: themeProvider.accentColor,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        isMe ? strings.youSender : msg.nickname,
+                        style: TextStyle(
+                          color: themeProvider.accentColor,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Text(
+                    timeStr,
+                    style: const TextStyle(
+                      color: Colors.white54,
+                      fontSize: 11,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              AudioBubble(
+                audioUrl: msg.mediaUrl!,
+                bubbleColor: Colors.transparent,
+                textColor: Colors.white,
+                isMe: isMe,
+                isAnonymous: msg.metadata?['voiceFilter'] == 'anonymous',
+              ),
+            ],
           ),
         );
       },

@@ -56,6 +56,16 @@ class ChatProvider extends ChangeNotifier {
 
   List<String> _notes = [];
 
+  // Pinned message state
+  String? _pinnedMessageId;
+  String? _pinnedMessageText;
+  String? _pinnedMessageSender;
+
+  String? get pinnedMessageId => _pinnedMessageId;
+  String? get pinnedMessageText => _pinnedMessageText;
+  String? get pinnedMessageSender => _pinnedMessageSender;
+  bool get hasPinnedMessage => _pinnedMessageId != null && _pinnedMessageId!.isNotEmpty;
+
   // Cached messages list (dirty flag pattern)
   List<Message>? _cachedMessages;
 
@@ -582,6 +592,11 @@ class ChatProvider extends ChangeNotifier {
           final oldOnline = _isOtherOnline;
           final oldTyping = _isOtherTyping;
           final oldLastSeen = _otherLastSeen;
+          final oldPinnedId = _pinnedMessageId;
+
+          _pinnedMessageId = data['pinnedMessageId'] as String?;
+          _pinnedMessageText = data['pinnedMessageText'] as String?;
+          _pinnedMessageSender = data['pinnedMessageSender'] as String?;
 
           _isOtherOnline = false;
           _isOtherTyping = false;
@@ -618,7 +633,8 @@ class ChatProvider extends ChangeNotifier {
 
           if (oldOnline != _isOtherOnline ||
               oldTyping != _isOtherTyping ||
-              oldLastSeen != _otherLastSeen) {
+              oldLastSeen != _otherLastSeen ||
+              oldPinnedId != _pinnedMessageId) {
             notifyListeners();
           }
         }
@@ -753,8 +769,33 @@ class ChatProvider extends ChangeNotifier {
     _localMessages = [];
     _invalidateMessagesCache();
     _lastMessageId = null;
+    _pinnedMessageId = null;
+    _pinnedMessageText = null;
+    _pinnedMessageSender = null;
     PreferencesService.saveLastActiveRoom(null);
     notifyListeners();
+  }
+
+  Future<void> pinMessage(Message msg) async {
+    if (_roomCode == null) return;
+    String display = msg.text.trim();
+    if (msg.type == 'image') display = '📷 [Fotoğraf]';
+    if (msg.type == 'video') display = '🎥 [Video]';
+    if (msg.type == 'audio') display = '🎤 [Ses Kaydı]';
+    if (msg.type == 'location') display = '📍 [Konum]';
+    if (display.isEmpty) display = '[Medya]';
+
+    await _repository.pinMessage(
+      _roomCode!,
+      messageId: msg.id,
+      text: display,
+      sender: msg.nickname,
+    );
+  }
+
+  Future<void> unpinMessage() async {
+    if (_roomCode == null) return;
+    await _repository.unpinMessage(_roomCode!);
   }
 
   void addLocalMessage(Message msg) {

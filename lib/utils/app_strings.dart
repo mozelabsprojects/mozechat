@@ -25,6 +25,14 @@ class AppStrings {
   String get unstar => isTr ? 'YILDIZI KALDIR' : 'UNSTAR';
   String get pin => isTr ? 'BAŞA SABİTLE' : 'PIN TO TOP';
   String get unpin => isTr ? 'SABİTİ KALDIR' : 'UNPIN';
+  String get pinMessage => isTr ? 'Mesajı Sabitle' : 'Pin Message';
+  String get unpinMessage => isTr ? 'Sabitlemeyi Kaldır' : 'Unpin Message';
+  String get pinnedMessage => isTr ? 'Sabitlenen Mesaj' : 'Pinned Message';
+  String pinnedBy(String sender) => isTr ? '$sender sabitledi' : 'Pinned by $sender';
+  String get searchInChat => isTr ? 'Sohbette ara...' : 'Search in chat...';
+  String get noSearchResults => isTr ? 'Eşleşen mesaj bulunamadı' : 'No matching messages found';
+  String matchesCount(int current, int total) => '$current / $total';
+  String get jumpToMessage => isTr ? 'Mesaja Git' : 'Jump to Message';
   String get clear => isTr ? 'TEMİZLE' : 'CLEAR';
   String get connect => isTr ? 'BAĞLAN' : 'CONNECT';
   String get creator => isTr ? 'KURUCU' : 'CREATOR';
@@ -229,7 +237,9 @@ class AppStrings {
   String get mediaGalleryTitle => isTr ? 'MEDYA GALERİSİ' : 'MEDIA GALLERY';
   String get photosTab => isTr ? 'FOTOĞRAFLAR' : 'PHOTOS';
   String get videosTab => isTr ? 'VİDEOLAR' : 'VIDEOS';
+  String get audiosTab => isTr ? 'SESLER' : 'AUDIO';
   String get noMediaFound => isTr ? '> MEDYA_BULUNAMADI' : '> NO_MEDIA_FOUND';
+  String get noAudioFound => isTr ? '> SES_KAYDI_BULUNAMADI' : '> NO_AUDIO_FOUND';
   String get editMediaTitle => isTr ? 'MEDYAYI DÜZENLE' : 'EDIT MEDIA';
   String get crop => isTr ? 'Kırp' : 'Crop';
   String get qualityNormal => isTr ? 'KALİTE: NORMAL' : 'QUALITY: NORMAL';
@@ -451,4 +461,5 @@ class AppStrings {
   String get exportHeaderTitle => isTr ? '=== MOZECHAT SOHBET GEÇMİŞİ ===' : '=== MOZECHAT HISTORY EXPORT ===';
   String get exportRoomCodeLabel => isTr ? 'Oda Kodu' : 'Room Code';
   String get exportDateLabel => isTr ? 'Tarih' : 'Export Date';
+  String get youSender => isTr ? 'Sen' : 'You';
 }
