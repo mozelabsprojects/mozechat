@@ -283,7 +283,6 @@ class MediaGalleryScreen extends StatelessWidget {
                 bubbleColor: Colors.transparent,
                 textColor: Colors.white,
                 isMe: isMe,
-                isAnonymous: msg.metadata?['voiceFilter'] == 'anonymous',
               ),
             ],
           ),

@@ -58,6 +58,37 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
     return DateFormat('MMM d, HH:mm').format(lastSeen);
   }
 
+  Future<void> _handleCallAction(BuildContext context) async {
+    final chatProvider = context.read<ChatProvider>();
+    final callProvider = context.read<CallProvider>();
+    final strings = context.read<LocaleProvider>().strings;
+
+    if (chatProvider.roomCode == null || chatProvider.currentUserId == null) {
+      return;
+    }
+    if (callProvider.isInCall) {
+      callProvider.openCallScreenNow();
+      return;
+    }
+    if (callProvider.hasIncomingRoomCall) {
+      await callProvider.joinIncomingRoomCall(
+        roomCode: chatProvider.roomCode,
+        openCallScreen: true,
+      );
+      return;
+    }
+    try {
+      await callProvider.startCall(
+        chatProvider.roomCode!,
+        chatProvider.currentUserId!,
+        chatProvider.nickname ?? strings.unknownUser,
+        openCallScreen: true,
+      );
+    } catch (e) {
+      debugPrint('Start call failed: $e');
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final chatProvider = context.watch<ChatProvider>();
@@ -156,6 +187,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                 ),
               ],
             ),
+            const SizedBox(height: 1),
             Text(
               chatProvider.isOtherTyping
                   ? strings.typing
@@ -176,6 +208,8 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                     ? FontStyle.italic
                     : FontStyle.normal,
               ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ],
         ),
@@ -280,86 +314,38 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: Icon(Icons.search_rounded, color: topBarTextColor),
             ),
           ),
-        if (chatProvider.panicCamouflageEnabled)
+        if (callProvider.isInCall || callProvider.hasIncomingRoomCall)
           BouncyTap(
-            onTap: () {
+            onTap: () => _handleCallAction(context),
+            child: const Padding(
+              padding: EdgeInsets.symmetric(horizontal: 8.0),
+              child: Icon(
+                Icons.phone_in_talk_rounded,
+                color: Color(0xFF159D87),
+              ),
+            ),
+          ),
+        PopupMenuButton<String>(
+          icon: Icon(Icons.more_vert, color: topBarTextColor),
+          color: Theme.of(context).cardColor,
+          onSelected: (value) async {
+            if (value == 'call') {
+              await _handleCallAction(context);
+            } else if (value == 'qr') {
+              if (chatProvider.roomCode != null) {
+                QRDialog.show(
+                  context,
+                  roomCode: chatProvider.roomCode!,
+                  roomTitle: strings.roomQrCodeTitle,
+                );
+              }
+            } else if (value == 'panic') {
               Navigator.push(
                 context,
                 MaterialPageRoute(
                   fullscreenDialog: true,
                   builder: (_) => const PanicCamouflageScreen(),
                 ),
-              );
-            },
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.0),
-              child: Icon(Icons.shield_outlined, color: Colors.orangeAccent),
-            ),
-          ),
-        BouncyTap(
-          onTap: () {
-            if (chatProvider.roomCode != null) {
-              QRDialog.show(
-                context,
-                roomCode: chatProvider.roomCode!,
-                roomTitle: strings.roomQrCodeTitle,
-              );
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Icon(Icons.qr_code_2_rounded, color: topBarTextColor),
-          ),
-        ),
-        BouncyTap(
-          onTap: () async {
-            if (chatProvider.roomCode == null || chatProvider.currentUserId == null) {
-              return;
-            }
-            if (callProvider.isInCall) {
-              callProvider.openCallScreenNow();
-              return;
-            }
-            if (callProvider.hasIncomingRoomCall) {
-              await callProvider.joinIncomingRoomCall(
-                roomCode: chatProvider.roomCode,
-                openCallScreen: true,
-              );
-              return;
-            }
-            try {
-              await callProvider.startCall(
-                chatProvider.roomCode!,
-                chatProvider.currentUserId!,
-                chatProvider.nickname ?? strings.unknownUser,
-                openCallScreen: true,
-              );
-            } catch (e) {
-              debugPrint('Start call failed: $e');
-            }
-          },
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8.0),
-            child: Icon(
-              callProvider.isInCall || callProvider.hasIncomingRoomCall
-                  ? Icons.phone_in_talk_rounded
-                  : Icons.phone,
-              color: callProvider.isInCall || callProvider.hasIncomingRoomCall
-                  ? const Color(0xFF159D87)
-                  : topBarTextColor,
-            ),
-          ),
-        ),
-        PopupMenuButton<String>(
-          icon: Icon(Icons.more_vert, color: topBarTextColor),
-          color: Theme.of(context).cardColor,
-          onSelected: (value) {
-            if (value == 'leave') {
-              chatProvider.leaveRoom();
-              Navigator.pushAndRemoveUntil(
-                context,
-                MaterialPageRoute(builder: (_) => const RoomsListScreen()),
-                (route) => false,
               );
             } else if (value == 'gallery') {
               Navigator.push(
@@ -368,26 +354,34 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
                   builder: (_) => const MediaGalleryScreen(),
                 ),
               );
+            } else if (value == 'copy') {
+              onCopyCode();
             } else if (value == 'export') {
               chatProvider.exportChatHistoryAsText();
             } else if (value == 'settings') {
               onShowSettings();
-            } else if (value == 'copy') {
-              onCopyCode();
+            } else if (value == 'leave') {
+              chatProvider.leaveRoom();
+              Navigator.pushAndRemoveUntil(
+                context,
+                MaterialPageRoute(builder: (_) => const RoomsListScreen()),
+                (route) => false,
+              );
             }
           },
           itemBuilder: (BuildContext context) => [
             PopupMenuItem(
-              value: 'leave',
+              value: 'call',
               child: ListTile(
-                leading: const Icon(
-                  Icons.exit_to_app,
-                  color: Colors.redAccent,
-                ),
-                title: Text(
-                  strings.leaveRoom,
-                  style: const TextStyle(color: Colors.redAccent),
-                ),
+                leading: const Icon(Icons.phone, color: Color(0xFF159D87)),
+                title: Text(strings.voiceCallTitle),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'qr',
+              child: ListTile(
+                leading: const Icon(Icons.qr_code_2_rounded),
+                title: Text(strings.roomQrCodeTitle),
               ),
             ),
             PopupMenuItem(
@@ -395,6 +389,24 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: ListTile(
                 leading: const Icon(Icons.photo_library),
                 title: Text(strings.mediaGallery),
+              ),
+            ),
+            if (chatProvider.panicCamouflageEnabled)
+              PopupMenuItem(
+                value: 'panic',
+                child: ListTile(
+                  leading: const Icon(
+                    Icons.shield_outlined,
+                    color: Colors.orangeAccent,
+                  ),
+                  title: Text(strings.panicTitle),
+                ),
+              ),
+            PopupMenuItem(
+              value: 'copy',
+              child: ListTile(
+                leading: const Icon(Icons.copy),
+                title: Text(strings.copyRoomCode),
               ),
             ),
             PopupMenuItem(
@@ -412,10 +424,16 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               ),
             ),
             PopupMenuItem(
-              value: 'copy',
+              value: 'leave',
               child: ListTile(
-                leading: const Icon(Icons.copy),
-                title: Text(strings.copyRoomCode),
+                leading: const Icon(
+                  Icons.exit_to_app,
+                  color: Colors.redAccent,
+                ),
+                title: Text(
+                  strings.leaveRoom,
+                  style: const TextStyle(color: Colors.redAccent),
+                ),
               ),
             ),
           ],
@@ -427,6 +445,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
       backgroundColor: appBgColor.withValues(alpha: 0.8),
       iconTheme: IconThemeData(color: topBarTextColor),
       elevation: 0,
+      titleSpacing: NavigationToolbar.kMiddleSpacing / 2,
       flexibleSpace: ClipRect(
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 10, sigmaY: 10),

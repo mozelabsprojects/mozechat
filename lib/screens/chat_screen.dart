@@ -852,21 +852,6 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                   Row(
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      Expanded(child: Text('${strings.anonymousVoice}:')),
-                      Switch(
-                        value: chatProvider.isAnonymousVoice,
-                        activeThumbColor: themeProvider.accentColor,
-                        onChanged: (val) {
-                          setDialogState(() {
-                            chatProvider.toggleAnonymousVoice(val);
-                          });
-                        },
-                      ),
-                    ],
-                  ),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
                       Expanded(child: Text('${strings.tapToReveal}:')),
                       Switch(
                         value: chatProvider.tapToRevealEnabled,

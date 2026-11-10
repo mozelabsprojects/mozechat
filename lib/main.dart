@@ -26,6 +26,7 @@ import 'package:encrypt/encrypt.dart' as encrypt;
 import 'package:screen_protector/screen_protector.dart';
 import 'providers/call_provider.dart';
 import 'services/callkit_service.dart';
+import 'services/proximity_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
@@ -266,6 +267,7 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  ProximityService.init();
 
   try {
     await ScreenProtector.preventScreenshotOn();

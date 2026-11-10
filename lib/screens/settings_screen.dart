@@ -301,31 +301,6 @@ class _SettingsScreenState extends State<SettingsScreen> {
                                     children: [
                                       SwitchListTile(
                                         title: Text(
-                                          strings.anonymousVoiceTitle,
-                                          style: TextStyle(
-                                            color: accentColor,
-                                            fontWeight: FontWeight.bold,
-                                            letterSpacing: 1.5,
-                                            fontSize: 13,
-                                          ),
-                                        ),
-                                        subtitle: Text(
-                                          strings.anonymousVoiceSubtitle,
-                                          style: TextStyle(
-                                            color: Colors.white.withValues(alpha: 0.5),
-                                            fontSize: 10,
-                                          ),
-                                        ),
-                                        value: chatProvider.isAnonymousVoice,
-                                        activeThumbColor: accentColor,
-                                        inactiveTrackColor: Colors.black45,
-                                        onChanged: (value) {
-                                          chatProvider.toggleAnonymousVoice(value);
-                                        },
-                                      ),
-                                      Divider(color: accentColor.withValues(alpha: 0.15), height: 1),
-                                      SwitchListTile(
-                                        title: Text(
                                           strings.tapToRevealTitle,
                                           style: TextStyle(
                                             color: accentColor,

@@ -9,7 +9,6 @@ class AudioBubble extends StatefulWidget {
   final Color bubbleColor;
   final Color textColor;
   final bool isMe;
-  final bool isAnonymous;
 
   const AudioBubble({
     super.key,
@@ -17,7 +16,6 @@ class AudioBubble extends StatefulWidget {
     required this.bubbleColor,
     required this.textColor,
     required this.isMe,
-    this.isAnonymous = false,
   });
 
   @override
@@ -93,13 +91,6 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
     return UrlSource(widget.audioUrl);
   }
 
-  double get _effectivePlaybackSpeed {
-    if (widget.isAnonymous) {
-      return (_globalPlaybackSpeed * 0.75).clamp(0.5, 2.0);
-    }
-    return _globalPlaybackSpeed;
-  }
-
   Future<void> _initAudio() async {
     try {
       if (widget.audioUrl.isNotEmpty) {
@@ -114,7 +105,7 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
           setState(() => _duration = d);
         }
 
-        await _audioPlayer.setPlaybackRate(_effectivePlaybackSpeed);
+        await _audioPlayer.setPlaybackRate(_globalPlaybackSpeed);
       }
     } catch (e) {
       // Ignore errors silently
@@ -198,7 +189,7 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
           await _audioPlayer.resume();
         }
 
-        await _audioPlayer.setPlaybackRate(_effectivePlaybackSpeed);
+        await _audioPlayer.setPlaybackRate(_globalPlaybackSpeed);
 
         if (mounted) setState(() => _isPlaying = true);
       }
@@ -217,7 +208,7 @@ class _AudioBubbleState extends State<AudioBubble> with AutomaticKeepAliveClient
     }
 
     try {
-      await _audioPlayer.setPlaybackRate(_effectivePlaybackSpeed);
+      await _audioPlayer.setPlaybackRate(_globalPlaybackSpeed);
     } catch (_) {}
 
     if (mounted) {

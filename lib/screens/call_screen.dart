@@ -1,9 +1,11 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
+import '../services/proximity_service.dart';
 
 class CallScreen extends StatefulWidget {
   const CallScreen({super.key});
@@ -17,10 +19,19 @@ class _CallScreenState extends State<CallScreen>
   CallProvider? _callProvider;
   bool _hasPopped = false;
   late final AnimationController _pulseController;
+  StreamSubscription<bool>? _proximitySub;
+  bool _isNear = false;
 
   @override
   void initState() {
     super.initState();
+    ProximityService.enable();
+    _isNear = ProximityService.isNear;
+    _proximitySub = ProximityService.proximityStream.listen((near) {
+      if (mounted && _isNear != near) {
+        setState(() => _isNear = near);
+      }
+    });
     _pulseController = AnimationController(
       vsync: this,
       duration: const Duration(milliseconds: 1800),
@@ -59,6 +70,7 @@ class _CallScreenState extends State<CallScreen>
 
   @override
   void dispose() {
+    _proximitySub?.cancel();
     _pulseController.dispose();
     _callProvider?.setCallScreenOpen(false);
     _callProvider?.removeListener(_onCallStateChanged);
@@ -109,8 +121,10 @@ class _CallScreenState extends State<CallScreen>
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: SafeArea(
-        child: Column(
+      body: Stack(
+        children: [
+          SafeArea(
+            child: Column(
           children: [
             // 1. WhatsApp-style Top Bar (Minimize button + E2E Encryption Pill)
             Padding(
@@ -444,7 +458,18 @@ class _CallScreenState extends State<CallScreen>
           ],
         ),
       ),
-    );
+      if (_isNear)
+        Positioned.fill(
+          child: AbsorbPointer(
+            absorbing: true,
+            child: Container(
+              color: Colors.black,
+            ),
+          ),
+        ),
+    ],
+  ),
+);
   }
 
   Widget _buildControlAction({

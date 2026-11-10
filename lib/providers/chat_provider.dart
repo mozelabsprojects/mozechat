@@ -96,20 +96,12 @@ class ChatProvider extends ChangeNotifier {
   String get backgroundStyle => _backgroundStyle;
 
   int _messageLimit = 50;
-  bool _isAnonymousVoice = false;
-  bool get isAnonymousVoice => _isAnonymousVoice;
 
   bool _tapToRevealEnabled = false;
   bool get tapToRevealEnabled => _tapToRevealEnabled;
 
   bool _panicCamouflageEnabled = false;
   bool get panicCamouflageEnabled => _panicCamouflageEnabled;
-
-  void toggleAnonymousVoice(bool val) {
-    _isAnonymousVoice = val;
-    PreferencesService.saveAnonymousVoiceEnabled(val);
-    notifyListeners();
-  }
 
   void toggleTapToReveal(bool val) {
     _tapToRevealEnabled = val;
@@ -135,7 +127,6 @@ class ChatProvider extends ChangeNotifier {
     _nickname = await PreferencesService.getNickname();
     _backgroundStyle =
         await PreferencesService.getBackgroundStyle() ?? 'matrix';
-    _isAnonymousVoice = await PreferencesService.getAnonymousVoiceEnabled();
     _tapToRevealEnabled = await PreferencesService.getTapToRevealEnabled();
     _panicCamouflageEnabled = await PreferencesService.getPanicCamouflageEnabled();
     notifyListeners();

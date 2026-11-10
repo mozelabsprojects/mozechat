@@ -186,7 +186,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
           localId: localId,
           metadata: {
             if (_isBurnMode) 'burnAfterRead': true,
-            if (provider.isAnonymousVoice) 'voiceFilter': 'anonymous',
           },
         );
         provider.addLocalMessage(tempMsg);
@@ -214,7 +213,6 @@ class _ChatBottomInputBarState extends State<ChatBottomInputBar> {
           localId: localId,
           metadata: {
             if (_isBurnMode) 'burnAfterRead': true,
-            if (provider.isAnonymousVoice) 'voiceFilter': 'anonymous',
           },
         );
       } else {

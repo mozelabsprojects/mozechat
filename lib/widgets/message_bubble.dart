@@ -615,7 +615,6 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         bubbleColor: widget.currentBg,
         textColor: widget.textColor,
         isMe: widget.isMe,
-        isAnonymous: widget.msg.metadata?['voiceFilter'] == 'anonymous',
       );
     } else if (widget.msg.text.startsWith('📞')) {
       final callProvider = context.watch<CallProvider>();

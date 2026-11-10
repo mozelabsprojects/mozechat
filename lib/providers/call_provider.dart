@@ -10,6 +10,7 @@ import '../services/callkit_service.dart';
 import '../services/notification_service.dart';
 import '../services/preferences_service.dart';
 import '../services/crypto_service.dart';
+import '../services/proximity_service.dart';
 import '../repositories/chat_repository.dart';
 import '../repositories/call_repository.dart';
 import '../utils/app_strings.dart';
@@ -55,6 +56,7 @@ class CallProvider extends ChangeNotifier {
       _isInCall = true;
       _isCallConnected = true;
       _startDurationTimerIfNeeded();
+      ProximityService.enable();
       notifyListeners();
       if (!_isCaller && !_isCallScreenOpen) {
         openCallScreenNow();
@@ -65,6 +67,7 @@ class CallProvider extends ChangeNotifier {
       _isInCall = true;
       _isCallConnected = true;
       _startDurationTimerIfNeeded();
+      ProximityService.enable();
       notifyListeners();
       if (!_isCaller && !_isCallScreenOpen) {
         openCallScreenNow();
@@ -227,6 +230,7 @@ class CallProvider extends ChangeNotifier {
   }
 
   void _resetCallState() {
+    ProximityService.disable();
     _durationTimer?.cancel();
     _durationTimer = null;
     _isInCall = false;
@@ -357,6 +361,7 @@ class CallProvider extends ChangeNotifier {
     _incomingCallId = null;
     _incomingOffer = null;
     _incomingCallerName = null;
+    ProximityService.enable();
     notifyListeners();
 
     if (openCallScreen) {
@@ -467,6 +472,7 @@ class CallProvider extends ChangeNotifier {
     _currentRoomCode = roomCode;
     _currentUserNickname = nickname;
     _clearIncomingBannerState();
+    ProximityService.enable();
     notifyListeners();
 
     if (openCallScreen) {

@@ -214,19 +214,8 @@ class PreferencesService {
   }
 
   // --- STEALTH & PRIVACY FEATURES ---
-  static const String _anonymousVoiceKey = 'anonymous_voice_enabled';
   static const String _tapToRevealKey = 'tap_to_reveal_enabled';
   static const String _panicCamouflageKey = 'panic_camouflage_enabled';
-
-  static Future<bool> getAnonymousVoiceEnabled() async {
-    final prefs = await _getPrefs();
-    return prefs.getBool(_anonymousVoiceKey) ?? false;
-  }
-
-  static Future<void> saveAnonymousVoiceEnabled(bool enabled) async {
-    final prefs = await _getPrefs();
-    await prefs.setBool(_anonymousVoiceKey, enabled);
-  }
 
   static Future<bool> getTapToRevealEnabled() async {
     final prefs = await _getPrefs();

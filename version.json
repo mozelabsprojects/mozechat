@@ -1,7 +1,7 @@
 {
-  "version": "0.2.3",
-  "versionCode": 9,
+  "version": "0.2.4",
+  "versionCode": 10,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 🎙️ Sesli Mesaj Waveform & Hızlandırıcı: Ses kayıtlarında dalga formu üzerinden ileri/geri sarma (scrubbing) ve WhatsApp tarzı 1x, 1.5x, 2x hızlandırma butonu\n• 🔍 Sohbet İçi Anlık Mesaj Arama: Şifresi çözülmüş mesajlarda canlı kelime arama, eşleşme sayacı ve mesaja otomatik odaklanma/parlatma\n• 🖼️ Oda Medya Galerisi: Sohbet üst barına dokunulduğunda tüm fotoğraf, video ve ses kayıtlarını topluca sunan şık galeri paneli ve dinlenebilir ses kayıtları sekmesi\n• 📌 Mesaj Sabitleme (Pinned Message): Odada kritik mesajı WhatsApp tarzı şık bir şeritle tepeye sabitleme ve tek dokunuşla mesaja gitme",
+  "changelog": "• 🎙️ Normal Sesli Mesajlar: Robotik/anonim ses filtresi ve ayarı tamamen kaldırıldı, tüm ses kayıtları doğal orijinal sesle gönderiliyor\n• 📱 Kulağa Götürünce Ekran Karartma (Proximity Sensor): Sesli arama esnasında telefon kulağa götürüldüğünde ekran otomatik kararır ve dokunmatik kilitlenerek kulakla yanlışlıkla aramayı kapatma veya butonlara basma engellenir\n• 💬 Sohbet Üst Barı Sadeleştirmesi: Arama büyüteci hariç diğer butonlar 3 nokta menüsüne taşındı; 'Çevrimiçi' ve 'Son görülme' yazıları artık ferahça ve net şekilde okunuyor",
   "forceUpdate": false
 }
