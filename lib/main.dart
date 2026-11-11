@@ -462,7 +462,7 @@ class _MozechatAppState extends State<MozechatApp> with WidgetsBindingObserver {
         if (success && mounted) {
           _homeScreen = const RoomsListScreen();
           WidgetsBinding.instance.addPostFrameCallback((_) async {
-            if (navigatorKey.currentState != null) {
+            if (navigatorKey.currentState != null && !NotificationService.isUserInChatScreen) {
               navigatorKey.currentState!.push(
                 MaterialPageRoute(builder: (_) => const ChatScreen()),
               );

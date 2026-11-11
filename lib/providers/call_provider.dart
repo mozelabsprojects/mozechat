@@ -56,6 +56,10 @@ class CallProvider extends ChangeNotifier {
   Map<String, dynamic>? _incomingOffer;
   String? _incomingCallerName;
 
+  // Deduplication guard for incoming call joins from multiple events (notifications, resume, CallKit)
+  String? _joiningCallKey;
+  DateTime? _lastJoinAttemptTime;
+
   CallProvider() {
     _webRTCService.onRemoteStreamAdded = (stream) {
       _remoteStream = stream;
@@ -248,8 +252,14 @@ class CallProvider extends ChangeNotifier {
       final nav = navigatorKey.currentState;
       if (nav != null) {
         _isCallScreenOpen = true;
-        nav.push(MaterialPageRoute(builder: (_) => const CallScreen())).then((_) {
-          _isCallScreenOpen = false;
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (!_isInCall && !_isJoiningCall && !hasIncomingRoomCall) {
+            _isCallScreenOpen = false;
+            return;
+          }
+          nav.push(MaterialPageRoute(builder: (_) => const CallScreen())).then((_) {
+            _isCallScreenOpen = false;
+          });
         });
       } else if (attempt < 20) {
         Future.delayed(const Duration(milliseconds: 100), () => tryPush(attempt + 1));
@@ -316,6 +326,7 @@ class CallProvider extends ChangeNotifier {
     _callDurationSeconds = 0;
     _currentRoomCode = null;
     _peerDisplayName = null;
+    _joiningCallKey = null;
     notifyListeners();
   }
 
@@ -409,126 +420,152 @@ class CallProvider extends ChangeNotifier {
     final targetRoom = roomCode ?? _watchedRoomCode ?? _currentRoomCode;
     if (targetRoom == null || targetRoom.isEmpty) return;
 
-    if (_isJoiningCall) {
+    final now = DateTime.now();
+    final callKey = '$targetRoom:${callId ?? ""}';
+
+    if (_isJoiningCall || _isInCall) {
       if (openCallScreen) openCallScreenNow();
       return;
     }
 
-    if (_isInCall) {
+    // Deduplicate rapid re-entrant calls within 3 seconds (from notification + resume + CallKit)
+    if (_lastJoinAttemptTime != null &&
+        now.difference(_lastJoinAttemptTime!).inMilliseconds < 3000 &&
+        _joiningCallKey == callKey) {
       if (openCallScreen) openCallScreenNow();
       return;
     }
+    _lastJoinAttemptTime = now;
+    _joiningCallKey = callKey;
 
-    String? targetCallId = callId ?? _incomingCallId;
-    Map<String, dynamic>? targetOffer = offer ?? _incomingOffer;
-    String? targetCallerName = callerName ?? _incomingCallerName;
-    final bool earlyVideo = isVideoHint ||
-        _offerHasVideo(targetOffer) ||
-        (offer == null && callId == null && _incomingIsVideo);
+    try {
+      String? targetCallId = callId ?? _incomingCallId;
+      Map<String, dynamic>? targetOffer = offer ?? _incomingOffer;
+      String? targetCallerName = callerName ?? _incomingCallerName;
+      final bool earlyVideo = isVideoHint ||
+          _offerHasVideo(targetOffer) ||
+          (offer == null && callId == null && _incomingIsVideo);
 
-    // Immediately transition state and open CallScreen so tapping feels instant (0ms latency)
-    _isJoiningCall = true;
-    _isInCall = true;
-    _isCallConnected = false;
-    _isCaller = false;
-    _isMuted = false;
-    _isSpeaker = earlyVideo;
-    _isVideoCall = earlyVideo;
-    _isCameraOn = earlyVideo;
-    _isRemoteCameraOn = true;
-    _callDurationSeconds = 0;
-    _callStartTime = DateTime.now();
-    _currentRoomCode = targetRoom;
-    _incomingCallId = null;
-    _incomingOffer = null;
-    _incomingCallerName = null;
-    _incomingIsVideo = false;
-    if (earlyVideo) {
-      ProximityService.setKeepScreenOn(true);
-    } else {
-      ProximityService.enable();
-    }
-    notifyListeners();
-
-    if (openCallScreen) {
-      openCallScreenNow();
-    }
-
-    // Dismiss any ringing system CallKit UI or local notifications for this room
-    unawaited(_callkitService.endAllCalls());
-    unawaited(NotificationService.clearNotificationsForRoom(targetRoom));
-
-    _peerDisplayName = await _resolveDisplayName(
-      targetRoom,
-      preferredName: targetCallerName,
-    );
-    notifyListeners();
-
-    final permissions = await [
-      Permission.microphone,
-      Permission.camera,
-      Permission.bluetoothConnect,
-    ].request();
-    final bool cameraAllowed = permissions[Permission.camera]?.isGranted ?? false;
-    _currentUserNickname = await PreferencesService.getNickname() ?? 'Unknown';
-
-    // If offer or callId wasn't cached (e.g. tapped from CallKit or chat message bubble), fetch from Firestore
-    if (targetOffer == null || targetCallId == null || targetCallId.isEmpty) {
-      Map<String, dynamic>? callDoc;
-      if (targetCallId != null && targetCallId.isNotEmpty) {
-        callDoc = await _callRepository.getCall(targetRoom, targetCallId);
+      // Immediately transition state and open CallScreen so tapping feels instant (0ms latency)
+      _isJoiningCall = true;
+      _isInCall = true;
+      _isCallConnected = false;
+      _isCaller = false;
+      _isMuted = false;
+      _isSpeaker = earlyVideo;
+      _isVideoCall = earlyVideo;
+      _isCameraOn = earlyVideo;
+      _isRemoteCameraOn = true;
+      _callDurationSeconds = 0;
+      _callStartTime = DateTime.now();
+      _currentRoomCode = targetRoom;
+      _incomingCallId = null;
+      _incomingOffer = null;
+      _incomingCallerName = null;
+      _incomingIsVideo = false;
+      if (earlyVideo) {
+        ProximityService.setKeepScreenOn(true);
+      } else {
+        ProximityService.enable();
       }
-      if (callDoc == null || callDoc['status'] != 'ringing') {
-        callDoc = await _callRepository.getLatestRingingCall(
-          targetRoom,
-          excludeCallerId: FirebaseAuth.instance.currentUser?.uid,
-        );
+      notifyListeners();
+
+      if (openCallScreen) {
+        openCallScreenNow();
       }
 
-      if (callDoc != null && callDoc['offer'] is Map && callDoc['status'] == 'ringing') {
-        targetCallId = callDoc['callId']?.toString();
-        targetOffer = Map<String, dynamic>.from(callDoc['offer'] as Map);
-        final docCaller = callDoc['callerName']?.toString();
-        if (docCaller != null && docCaller.isNotEmpty) {
-          _peerDisplayName = await _resolveDisplayName(targetRoom, preferredName: docCaller);
+      // Dismiss any ringing system CallKit UI or local notifications for this room
+      unawaited(_callkitService.endAllCalls());
+      unawaited(NotificationService.clearNotificationsForRoom(targetRoom));
+
+      _peerDisplayName = await _resolveDisplayName(
+        targetRoom,
+        preferredName: targetCallerName,
+      );
+      notifyListeners();
+
+      // Safe permission check: avoid calling .request() from background/transition if already granted
+      bool cameraAllowed = false;
+      try {
+        final camGranted = await Permission.camera.isGranted;
+        final micGranted = await Permission.microphone.isGranted;
+        if (!camGranted || !micGranted) {
+          final permissions = await [
+            Permission.microphone,
+            Permission.camera,
+            Permission.bluetoothConnect,
+          ].request();
+          cameraAllowed = permissions[Permission.camera]?.isGranted ?? false;
+        } else {
+          cameraAllowed = true;
         }
-        if (!_isVideoCall && (callDoc['isVideo'] == true || _offerHasVideo(targetOffer))) {
-          _isVideoCall = true;
-          _isSpeaker = true;
-          ProximityService.disable();
-          ProximityService.setKeepScreenOn(true);
-        }
-        notifyListeners();
+      } catch (e) {
+        debugPrint('Safe permission pre-check warning: $e');
       }
-    }
 
-    if (targetCallId == null || targetOffer == null) {
-      // No active ringing call found in Firestore — end cleanly
+      _currentUserNickname = await PreferencesService.getNickname() ?? 'Unknown';
+
+      // If offer or callId wasn't cached (e.g. tapped from CallKit or chat message bubble), fetch from Firestore
+      if (targetOffer == null || targetCallId == null || targetCallId.isEmpty) {
+        Map<String, dynamic>? callDoc;
+        if (targetCallId != null && targetCallId.isNotEmpty) {
+          callDoc = await _callRepository.getCall(targetRoom, targetCallId);
+        }
+        if (callDoc == null || callDoc['status'] != 'ringing') {
+          callDoc = await _callRepository.getLatestRingingCall(
+            targetRoom,
+            excludeCallerId: FirebaseAuth.instance.currentUser?.uid,
+          );
+        }
+
+        if (callDoc != null && callDoc['offer'] is Map && callDoc['status'] == 'ringing') {
+          targetCallId = callDoc['callId']?.toString();
+          targetOffer = Map<String, dynamic>.from(callDoc['offer'] as Map);
+          final docCaller = callDoc['callerName']?.toString();
+          if (docCaller != null && docCaller.isNotEmpty) {
+            _peerDisplayName = await _resolveDisplayName(targetRoom, preferredName: docCaller);
+          }
+          if (!_isVideoCall && (callDoc['isVideo'] == true || _offerHasVideo(targetOffer))) {
+            _isVideoCall = true;
+            _isSpeaker = true;
+            ProximityService.disable();
+            ProximityService.setKeepScreenOn(true);
+          }
+          notifyListeners();
+        }
+      }
+
+      if (targetCallId == null || targetOffer == null) {
+        // No active ringing call found in Firestore — end cleanly
+        _resetCallState();
+        return;
+      }
+
+      final ok = await _webRTCService.joinCall(
+        targetRoom,
+        targetCallId,
+        targetOffer,
+        cameraAllowed: cameraAllowed,
+      );
+      if (!ok) {
+        _resetCallState();
+        return;
+      }
+
+      _isJoiningCall = false;
+      _isInCall = true;
+      _localStream = _webRTCService.localStream;
+      _applyVideoModeFromService();
+      _webRTCService.toggleSpeaker(_isSpeaker);
+      _startDurationTimerIfNeeded();
+      notifyListeners();
+
+      if (openCallScreen && !_isCallScreenOpen) {
+        openCallScreenNow();
+      }
+    } catch (e) {
+      debugPrint('joinIncomingRoomCall unexpected exception: $e');
       _resetCallState();
-      return;
-    }
-
-    final ok = await _webRTCService.joinCall(
-      targetRoom,
-      targetCallId,
-      targetOffer,
-      cameraAllowed: cameraAllowed,
-    );
-    if (!ok) {
-      _resetCallState();
-      return;
-    }
-
-    _isJoiningCall = false;
-    _isInCall = true;
-    _localStream = _webRTCService.localStream;
-    _applyVideoModeFromService();
-    _webRTCService.toggleSpeaker(_isSpeaker);
-    _startDurationTimerIfNeeded();
-    notifyListeners();
-
-    if (openCallScreen && !_isCallScreenOpen) {
-      openCallScreenNow();
     }
   }
 

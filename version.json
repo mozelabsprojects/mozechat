@@ -1,7 +1,7 @@
 {
-  "version": "0.3.2",
-  "versionCode": 13,
+  "version": "0.3.3",
+  "versionCode": 14,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• ⚡ Performans ve Pil Tasarrufu: Sohbetler listesindeki gereksiz çift Firestore dinleyicisi kaldırılarak liste tepki hızı artırıldı ve kota tüketimi %50 düşürüldü\n• 🔤 Mesaj Döngüsü Optimizasyonu: Şifre çözme akışındaki tekrarlı dil sorgusu teke indirilerek mesaj listesi kaydırma akıcılığı artırıldı\n• 🎥 Görüntülü Aramada Çift Tıklama: Görüntülü görüşme esnasında ekrana çift dokunarak anında ön/arka kamera çevirme desteği\n• ⏱️ Akıllı Yazıyor... Zamanlayıcısı: Karşı tarafın interneti aniden kopsa dahi 'Yazıyor...' bilgisinin ekranda takılı kalmasını önleyen otomatik zaman aşımı koruması",
+  "changelog": "• 🛠️ Görüntülü Arama Bildirim Çökmesi Düzeltildi: Android 14+ cihazlarda görüntülü arama bildirimine tıklandığında oluşan 'Önbelleği temizle / Uygulama durdu' çökmesi tamamen giderildi\n• 🚀 Bildirimden Aramaya Sorunsuz Bağlantı: Kilit ekranından veya bildirim çekmecesinden aramayı yanıtlama akışı ve WebRTC izin yönetimi optimize edildi\n• 🛡️ Güvenli Çağrı ve Senkronizasyon: Çağrı kabul olaylarının çift tetiklenmesi önlenerek aramalara anında ve kararlı bağlanma sağlandı",
   "forceUpdate": false
 }

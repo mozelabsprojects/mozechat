@@ -151,8 +151,15 @@ class NotificationService {
             final callProvider = context.read<CallProvider>();
 
             if (!NotificationService.shouldSuppressNotification(roomCode: roomCode)) {
-              final success = await chatProvider.joinRoom(roomCode);
-              if (success && context.mounted) {
+              if (chatProvider.roomCode != roomCode) {
+                final success = await chatProvider.joinRoom(roomCode);
+                if (success && context.mounted && !isUserInChatScreen) {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const ChatScreen()),
+                  );
+                }
+              } else if (!isUserInChatScreen && context.mounted) {
                 Navigator.push(
                   context,
                   MaterialPageRoute(builder: (_) => const ChatScreen()),

@@ -71,7 +71,11 @@ class CallkitService {
       appName: 'Mozechat',
       avatar: '',
       handle: isVideo ? strings.videoCallTitle : strings.voiceCallTitle,
-      type: isVideo ? 1 : 0, // 0 = audio call, 1 = video call
+      // On Android, type 1 prompts CallkitNotificationService to start with FOREGROUND_SERVICE_TYPE_CAMERA
+      // from a background broadcast receiver, which Android 14+ strictly terminates with
+      // ForegroundServiceStartNotAllowedException / SecurityException (causing "Clear cache / Önbelleği temizle" app crash).
+      // WebRTC manages video in-app; CallKit handle/title and extra['isVideo'] indicate video call mode.
+      type: defaultTargetPlatform == TargetPlatform.iOS && isVideo ? 1 : 0,
       missedCallNotification: const NotificationParams(
         showNotification: false,
         isShowCallback: false,
