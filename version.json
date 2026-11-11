@@ -1,7 +1,7 @@
 {
-  "version": "0.3.1",
-  "versionCode": 12,
+  "version": "0.3.2",
+  "versionCode": 13,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 🎥 Uçtan Uca Şifreli Görüntülü Arama: Sohbet menüsünden tek dokunuşla WebRTC (DTLS-SRTP) şifreli görüntülü konuşma\n• 📱 Sürüklenebilir PIP & Kamera Kontrolleri: Tam ekran karşı taraf videosu, 4 köşeye sürüklenebilir kendi kamera penceresi, kamera aç/kapat, ön/arka kamera çevirme\n• 🔧 Görüntü & Ses Senkronizasyon İyileştirmeleri: Unified Plan video akışı bağlama, anlık çağrı sonlandırma ve hoparlör/yakınlık sensörü optimizasyonu",
+  "changelog": "• ⚡ Performans ve Pil Tasarrufu: Sohbetler listesindeki gereksiz çift Firestore dinleyicisi kaldırılarak liste tepki hızı artırıldı ve kota tüketimi %50 düşürüldü\n• 🔤 Mesaj Döngüsü Optimizasyonu: Şifre çözme akışındaki tekrarlı dil sorgusu teke indirilerek mesaj listesi kaydırma akıcılığı artırıldı\n• 🎥 Görüntülü Aramada Çift Tıklama: Görüntülü görüşme esnasında ekrana çift dokunarak anında ön/arka kamera çevirme desteği\n• ⏱️ Akıllı Yazıyor... Zamanlayıcısı: Karşı tarafın interneti aniden kopsa dahi 'Yazıyor...' bilgisinin ekranda takılı kalmasını önleyen otomatik zaman aşımı koruması",
   "forceUpdate": false
 }

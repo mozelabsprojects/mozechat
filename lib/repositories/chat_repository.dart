@@ -377,6 +377,8 @@ class ChatRepository {
           }).toList();
 
           final decryptedPayloads = await CryptoService.decryptMessageBatchAsync(cipherList, key);
+          final lang = await PreferencesService.getLanguage();
+          final deletedText = AppStrings(lang).messageDeletedText;
 
           final messages = <Message>[];
           for (int i = 0; i < snapshot.docs.length; i++) {
@@ -432,8 +434,7 @@ class ChatRepository {
             }
 
             if (isDeleted) {
-              final lang = await PreferencesService.getLanguage();
-              text = AppStrings(lang).messageDeletedText;
+              text = deletedText;
               type = 'text';
               mediaUrl = null;
               mediaList = null;

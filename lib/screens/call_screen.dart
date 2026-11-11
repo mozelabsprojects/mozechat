@@ -596,7 +596,13 @@ class _CallScreenState extends State<CallScreen>
       backgroundColor: const Color(0xFF0B1014),
       body: Stack(
         children: [
-          Positioned.fill(child: background),
+          Positioned.fill(
+            child: GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onDoubleTap: () => context.read<CallProvider>().switchCamera(),
+              child: background,
+            ),
+          ),
 
           // Top gradient + header
           Positioned(

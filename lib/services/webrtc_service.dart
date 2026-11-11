@@ -485,6 +485,7 @@ class WebRTCService {
   }
 
   void _processQueuedCandidates() {
+    if (_peerConnection == null) return;
     for (var candidate in _remoteCandidatesQueue) {
       try {
         _peerConnection?.addCandidate(candidate);
@@ -572,7 +573,7 @@ class WebRTCService {
             sdpMLineIdx,
           );
 
-          if (!_hasSetRemoteDescription) {
+          if (!_hasSetRemoteDescription || _peerConnection == null) {
             _remoteCandidatesQueue.add(candidate);
           } else {
             try {

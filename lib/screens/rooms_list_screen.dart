@@ -1361,10 +1361,6 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
                                     ),
                                   ),
                                 ),
-                                _RoomAvatarUnreadBadge(
-                                  roomId: doc.id,
-                                  currentUid: currentUser.uid,
-                                ),
                               ],
                             ),
                             const SizedBox(width: 14),
@@ -1450,63 +1446,6 @@ class _RoomsListScreenState extends State<RoomsListScreen> {
           );
         },
       ),
-    );
-  }
-}
-
-class _RoomAvatarUnreadBadge extends StatelessWidget {
-  final String roomId;
-  final String currentUid;
-
-  const _RoomAvatarUnreadBadge({
-    required this.roomId,
-    required this.currentUid,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return StreamBuilder<QuerySnapshot>(
-      stream: FirebaseFirestore.instance
-          .collection('rooms')
-          .doc(roomId)
-          .collection('messages')
-          .where('status', whereIn: const ['sent', 'delivered'])
-          .limit(10)
-          .snapshots(),
-      builder: (context, snapshot) {
-        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
-          return const SizedBox.shrink();
-        }
-        final hasUnread = snapshot.data!.docs.any((d) {
-          final data = d.data() as Map<String, dynamic>;
-          final senderId = data['senderId'] as String?;
-          final isDeleted = (data['isDeleted'] as bool?) ?? false;
-          return senderId != null && senderId != currentUid && !isDeleted;
-        });
-
-        if (!hasUnread) return const SizedBox.shrink();
-
-        return Positioned(
-          top: -2,
-          right: -2,
-          child: Container(
-            width: 10,
-            height: 10,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE53935),
-              shape: BoxShape.circle,
-              border: Border.all(color: const Color(0xFF101216), width: 1.5),
-              boxShadow: [
-                BoxShadow(
-                  color: const Color(0xFFE53935).withValues(alpha: 0.6),
-                  blurRadius: 4,
-                  spreadRadius: 1,
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }

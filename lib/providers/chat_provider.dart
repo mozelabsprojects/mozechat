@@ -40,6 +40,7 @@ class ChatProvider extends ChangeNotifier {
   StreamSubscription<List<Message>>? _messagesSubscription;
   StreamSubscription<DocumentSnapshot>? _roomSubscription;
   Timer? _presenceCheckTimer;
+  Timer? _typingTimeoutTimer;
 
   int _memberCount = 1;
   bool _isOtherOnline = false;
@@ -538,6 +539,7 @@ class ChatProvider extends ChangeNotifier {
   void _listenToRoom() {
     _roomSubscription?.cancel();
     _presenceCheckTimer?.cancel();
+    _typingTimeoutTimer?.cancel();
     if (_roomCode != null) {
       _presenceCheckTimer = Timer.periodic(const Duration(seconds: 15), (_) {
         if (_isOtherOnline && _otherLastSeen != null) {
@@ -621,6 +623,17 @@ class ChatProvider extends ChangeNotifier {
             }
           });
           _isOtherTyping = newTyping;
+          if (newTyping) {
+            _typingTimeoutTimer?.cancel();
+            _typingTimeoutTimer = Timer(const Duration(seconds: 6), () {
+              if (_isOtherTyping) {
+                _isOtherTyping = false;
+                notifyListeners();
+              }
+            });
+          } else {
+            _typingTimeoutTimer?.cancel();
+          }
 
           if (oldOnline != _isOtherOnline ||
               oldTyping != _isOtherTyping ||
@@ -855,6 +868,8 @@ class ChatProvider extends ChangeNotifier {
   void dispose() {
     _presenceCheckTimer?.cancel();
     _presenceCheckTimer = null;
+    _typingTimeoutTimer?.cancel();
+    _typingTimeoutTimer = null;
     updatePresence(false);
     updateTyping(false);
     _messagesSubscription?.cancel();
