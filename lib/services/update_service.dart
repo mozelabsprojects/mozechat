@@ -133,12 +133,23 @@ class UpdateService {
             changelog = data['body'] as String? ?? changelog;
 
             final assets = data['assets'] as List<dynamic>? ?? [];
+            String? preferredApkUrl;
+            String? fallbackApkUrl;
             for (var asset in assets) {
               final name = asset['name'] as String? ?? '';
-              if (name.endsWith('.apk')) {
-                downloadUrl = asset['browser_download_url'] as String? ?? downloadUrl;
-                break;
+              final url = asset['browser_download_url'] as String?;
+              if (url == null || !name.endsWith('.apk')) continue;
+              if (name == 'app-release.apk' || name.contains('arm64-v8a')) {
+                preferredApkUrl = url;
+                if (name == 'app-release.apk') break;
+              } else {
+                fallbackApkUrl ??= url;
               }
+            }
+            if (preferredApkUrl != null) {
+              downloadUrl = preferredApkUrl;
+            } else if (fallbackApkUrl != null) {
+              downloadUrl = fallbackApkUrl;
             }
             fetchedFromGithub = true;
           }

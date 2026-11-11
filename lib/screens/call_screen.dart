@@ -22,6 +22,8 @@ class _CallScreenState extends State<CallScreen>
   late final AnimationController _pulseController;
   StreamSubscription<bool>? _proximitySub;
   bool _isNear = false;
+  bool _pipOnLeft = false;
+  bool _pipOnBottom = false;
 
   @override
   void initState() {
@@ -30,11 +32,16 @@ class _CallScreenState extends State<CallScreen>
     final isVideo = context.read<CallProvider>().isVideoCall;
     if (!isVideo) {
       ProximityService.enable();
+    } else {
+      ProximityService.disable();
+      ProximityService.setKeepScreenOn(true);
     }
     _isNear = isVideo ? false : ProximityService.isNear;
     _proximitySub = ProximityService.proximityStream.listen((near) {
-      if (mounted && _isNear != near) {
-        setState(() => _isNear = near);
+      final videoNow = _callProvider?.isVideoCall ?? false;
+      final effectiveNear = videoNow ? false : near;
+      if (mounted && _isNear != effectiveNear) {
+        setState(() => _isNear = effectiveNear);
       }
     });
     _pulseController = AnimationController(
@@ -55,6 +62,10 @@ class _CallScreenState extends State<CallScreen>
 
   void _onCallStateChanged() {
     if (!mounted || _hasPopped || _callProvider == null) return;
+
+    if (_callProvider!.isVideoCall && _isNear) {
+      setState(() => _isNear = false);
+    }
 
     if (!_callProvider!.isInCall && !_callProvider!.isJoiningCall) {
       _hasPopped = true;
@@ -662,16 +673,33 @@ class _CallScreenState extends State<CallScreen>
             ),
           ),
 
-          // Local camera picture-in-picture (only once the call is connected)
+          // Local camera picture-in-picture (draggable to any corner, tap to flip camera)
           if (isConnected)
-            Positioned(
-              top: topInset + 72,
-              right: 14,
+            AnimatedPositioned(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              top: _pipOnBottom ? null : topInset + 72,
+              bottom: _pipOnBottom
+                  ? MediaQuery.of(context).padding.bottom + 128
+                  : null,
+              left: _pipOnLeft ? 14 : null,
+              right: _pipOnLeft ? null : 14,
               child: GestureDetector(
                 onTap: () => context.read<CallProvider>().switchCamera(),
+                onPanUpdate: (details) {
+                  final size = MediaQuery.of(context).size;
+                  final newLeft = details.globalPosition.dx < size.width / 2;
+                  final newBottom = details.globalPosition.dy > size.height * 0.48;
+                  if (newLeft != _pipOnLeft || newBottom != _pipOnBottom) {
+                    setState(() {
+                      _pipOnLeft = newLeft;
+                      _pipOnBottom = newBottom;
+                    });
+                  }
+                },
                 child: Container(
-                  width: 104,
-                  height: 148,
+                  width: 108,
+                  height: 152,
                   decoration: BoxDecoration(
                     color: const Color(0xFF151E25),
                     borderRadius: BorderRadius.circular(16),

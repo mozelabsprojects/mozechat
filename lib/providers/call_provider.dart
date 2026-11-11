@@ -61,8 +61,17 @@ class CallProvider extends ChangeNotifier {
       _remoteStream = stream;
       _isInCall = true;
       _isCallConnected = true;
+      _isVideoCall = _webRTCService.isVideoCall;
       _startDurationTimerIfNeeded();
-      if (!_isVideoCall) ProximityService.enable();
+      if (_isVideoCall) {
+        ProximityService.disable();
+        ProximityService.setKeepScreenOn(true);
+      } else if (_isSpeaker) {
+        ProximityService.disable();
+      } else {
+        ProximityService.enable();
+      }
+      _webRTCService.toggleSpeaker(_isSpeaker);
       notifyListeners();
       if (!_isCaller && !_isCallScreenOpen) {
         openCallScreenNow();
@@ -72,8 +81,17 @@ class CallProvider extends ChangeNotifier {
     _webRTCService.onCallConnected = () {
       _isInCall = true;
       _isCallConnected = true;
+      _isVideoCall = _webRTCService.isVideoCall;
       _startDurationTimerIfNeeded();
-      if (!_isVideoCall) ProximityService.enable();
+      if (_isVideoCall) {
+        ProximityService.disable();
+        ProximityService.setKeepScreenOn(true);
+      } else if (_isSpeaker) {
+        ProximityService.disable();
+      } else {
+        ProximityService.enable();
+      }
+      _webRTCService.toggleSpeaker(_isSpeaker);
       notifyListeners();
       if (!_isCaller && !_isCallScreenOpen) {
         openCallScreenNow();
@@ -91,7 +109,13 @@ class CallProvider extends ChangeNotifier {
       }
     };
 
-    _callkitService.onCallAccepted = (callId, roomId, offer, callerName) async {
+    _callkitService.onCallAccepted = (
+      callId,
+      roomId,
+      offer,
+      callerName,
+      isVideo,
+    ) async {
       final resolvedCode = await _resolveRoomCode(roomId);
       if (resolvedCode.isEmpty) return;
 
@@ -119,6 +143,7 @@ class CallProvider extends ChangeNotifier {
         offer: offer,
         callerName: callerName,
         openCallScreen: true,
+        isVideoHint: isVideo,
       );
     };
 
@@ -166,9 +191,13 @@ class CallProvider extends ChangeNotifier {
       !_isInCall && !_isJoiningCall && _incomingCallId != null && _incomingOffer != null;
   String? get incomingCallId => _incomingCallId;
   String? get incomingCallerName => _incomingCallerName;
+  bool get isCallScreenOpen => _isCallScreenOpen;
 
   void setCallScreenOpen(bool isOpen) {
-    _isCallScreenOpen = isOpen;
+    if (_isCallScreenOpen != isOpen) {
+      _isCallScreenOpen = isOpen;
+      notifyListeners();
+    }
   }
 
   String get formattedDuration {
@@ -375,6 +404,7 @@ class CallProvider extends ChangeNotifier {
     Map<String, dynamic>? offer,
     String? callerName,
     bool openCallScreen = true,
+    bool isVideoHint = false,
   }) async {
     final targetRoom = roomCode ?? _watchedRoomCode ?? _currentRoomCode;
     if (targetRoom == null || targetRoom.isEmpty) return;
@@ -392,7 +422,8 @@ class CallProvider extends ChangeNotifier {
     String? targetCallId = callId ?? _incomingCallId;
     Map<String, dynamic>? targetOffer = offer ?? _incomingOffer;
     String? targetCallerName = callerName ?? _incomingCallerName;
-    final bool earlyVideo = _offerHasVideo(targetOffer) ||
+    final bool earlyVideo = isVideoHint ||
+        _offerHasVideo(targetOffer) ||
         (offer == null && callId == null && _incomingIsVideo);
 
     // Immediately transition state and open CallScreen so tapping feels instant (0ms latency)
@@ -593,11 +624,16 @@ class CallProvider extends ChangeNotifier {
       _callStartTime = DateTime.now();
       final cId = existingRinging['callId'].toString();
       final cOffer = Map<String, dynamic>.from(existingRinging['offer'] as Map);
+      bool canUseCam = cameraAllowed;
+      if (!video && (existingRinging['isVideo'] == true || _offerHasVideo(cOffer))) {
+        final camStatus = await Permission.camera.request();
+        canUseCam = camStatus.isGranted;
+      }
       final ok = await _webRTCService.joinCall(
         roomCode,
         cId,
         cOffer,
-        cameraAllowed: cameraAllowed,
+        cameraAllowed: canUseCam,
       );
       _isJoiningCall = false;
       if (!ok) {
@@ -714,6 +750,13 @@ class CallProvider extends ChangeNotifier {
   void toggleSpeaker() {
     _isSpeaker = !_isSpeaker;
     _webRTCService.toggleSpeaker(_isSpeaker);
+    if (!_isVideoCall && _isInCall) {
+      if (_isSpeaker) {
+        ProximityService.disable();
+      } else {
+        ProximityService.enable();
+      }
+    }
     notifyListeners();
   }
 

@@ -402,16 +402,29 @@ class WebRTCService {
 
     _peerConnection!.onTrack = (RTCTrackEvent event) {
       if (_isEndingCall) return;
+      event.track.enabled = true;
       if (event.streams.isNotEmpty) {
-        _remoteStream = event.streams[0];
-        for (var track in _remoteStream!.getAudioTracks()) {
+        final incoming = event.streams[0];
+        for (final track in incoming.getAudioTracks()) {
           track.enabled = true;
         }
-        if (_rendererInitialized && _remoteRenderer.srcObject != _remoteStream) {
-          _remoteRenderer.srcObject = _remoteStream;
-        } else if (_rendererInitialized && event.track.kind == 'video') {
-          // Re-attach so the renderer binds to the video track that just arrived
-          _remoteRenderer.srcObject = _remoteStream;
+        for (final track in incoming.getVideoTracks()) {
+          track.enabled = true;
+        }
+        if (_remoteStream == null ||
+            incoming.getVideoTracks().isNotEmpty ||
+            _remoteStream!.getVideoTracks().isEmpty) {
+          _remoteStream = incoming;
+        }
+        if (_rendererInitialized) {
+          // Force flutter_webrtc to re-bind the native surface when the video track arrives
+          // on the same MediaStream instance after the audio track
+          if (event.track.kind == 'video' && _remoteRenderer.srcObject == _remoteStream) {
+            _remoteRenderer.srcObject = null;
+          }
+          if (_remoteRenderer.srcObject != _remoteStream) {
+            _remoteRenderer.srcObject = _remoteStream;
+          }
         }
         if (onRemoteStreamAdded != null) {
           onRemoteStreamAdded!(_remoteStream!);
@@ -633,13 +646,19 @@ class WebRTCService {
 
     await _cleanupResourcesOnly();
 
+    _isEndingCall = false;
+    _isVideoCall = false;
+    _isCameraOn = true;
+    _isFrontCamera = true;
+    if (onCallEnded != null) onCallEnded!();
+
     // Ensure CallKit system UI / ongoing call notification is immediately cleared
-    await CallkitService().endAllCalls();
+    unawaited(CallkitService().endAllCalls());
     if (roomToEnd != null) {
       unawaited(NotificationService.clearNotificationsForRoom(roomToEnd));
     }
 
-    if (roomToEnd != null) {
+    if (roomToEnd != null && !fromRemote) {
       try {
         if (callToEnd != null) {
           await _callRepository.endCall(roomToEnd, callToEnd);
@@ -649,12 +668,6 @@ class WebRTCService {
         debugPrint('Error ending call in DB: $e');
       }
     }
-
-    _isEndingCall = false;
-    _isVideoCall = false;
-    _isCameraOn = true;
-    _isFrontCamera = true;
-    if (onCallEnded != null) onCallEnded!();
   }
 
   void toggleMute(bool isMuted) {

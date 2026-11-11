@@ -318,11 +318,15 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
         if (callProvider.isInCall || callProvider.hasIncomingRoomCall)
           BouncyTap(
             onTap: () => _handleCallAction(context),
-            child: const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8.0),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8.0),
               child: Icon(
-                Icons.phone_in_talk_rounded,
-                color: Color(0xFF159D87),
+                (callProvider.isInCall
+                        ? callProvider.isVideoCall
+                        : callProvider.incomingIsVideo)
+                    ? Icons.videocam_rounded
+                    : Icons.phone_in_talk_rounded,
+                color: const Color(0xFF159D87),
               ),
             ),
           ),

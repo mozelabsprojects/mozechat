@@ -1,7 +1,7 @@
 {
-  "version": "0.3.0",
-  "versionCode": 11,
+  "version": "0.3.1",
+  "versionCode": 12,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 🎥 Uçtan Uca Şifreli Görüntülü Arama: Sohbet menüsünden tek dokunuşla WebRTC (DTLS-SRTP) şifreli görüntülü konuşma\n• 📱 WhatsApp Tarzı Arayüz: Tam ekran karşı taraf videosu, küçük kendi kamera penceresi, kamera aç/kapat, ön/arka kamera çevirme\n• 📉 Veri Tasarrufu: 480p@24fps, 550 kbps sınırlı video; sesli aramalar aynı hafif yapıda çalışmaya devam ediyor\n• 🔔 Gelen aramada 'Görüntülü Arama' bildirimi ve sohbette görüntülü arama kaydı",
+  "changelog": "• 🎥 Uçtan Uca Şifreli Görüntülü Arama: Sohbet menüsünden tek dokunuşla WebRTC (DTLS-SRTP) şifreli görüntülü konuşma\n• 📱 Sürüklenebilir PIP & Kamera Kontrolleri: Tam ekran karşı taraf videosu, 4 köşeye sürüklenebilir kendi kamera penceresi, kamera aç/kapat, ön/arka kamera çevirme\n• 🔧 Görüntü & Ses Senkronizasyon İyileştirmeleri: Unified Plan video akışı bağlama, anlık çağrı sonlandırma ve hoparlör/yakınlık sensörü optimizasyonu",
   "forceUpdate": false
 }

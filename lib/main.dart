@@ -168,10 +168,18 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
                   excludeCallerId: uid,
                 );
                 if (ringingDoc != null && ringingDoc['callId'] != null) {
+                  final bool isVideo = ringingDoc['isVideo'] == true ||
+                      lowerText.contains('görüntülü') ||
+                      lowerText.contains('video');
+                  final Map<String, dynamic>? offerMap = ringingDoc['offer'] is Map
+                      ? Map<String, dynamic>.from(ringingDoc['offer'] as Map)
+                      : null;
                   await CallkitService().showCallkitIncoming(
                     callerName: nickname,
                     roomId: matchedCode,
                     callId: ringingDoc['callId'].toString(),
+                    offer: offerMap,
+                    isVideo: isVideo,
                   );
                 }
               } catch (_) {}
@@ -236,11 +244,19 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
 
         final effectiveCallerName = callerName ?? strings.unknownUser;
         final isVideoCall = message.data['isVideo']?.toString() == 'true';
+        Map<String, dynamic>? offerMap;
+        final rawOffer = message.data['offer'];
+        if (rawOffer is String && rawOffer.isNotEmpty) {
+          try {
+            offerMap = Map<String, dynamic>.from(jsonDecode(rawOffer));
+          } catch (_) {}
+        }
 
         await CallkitService().showCallkitIncoming(
           callerName: effectiveCallerName,
           roomId: roomId,
           callId: callId,
+          offer: offerMap,
           isVideo: isVideoCall,
         );
 

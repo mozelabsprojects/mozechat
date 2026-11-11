@@ -21,6 +21,7 @@ class CallkitService {
   String? _lastKnownRoomId;
   String? _lastKnownCallId;
   String? _lastKnownCallerName;
+  bool _lastKnownIsVideo = false;
 
   /// Tracks callIds that have already triggered CallKit so duplicate FCM messages never show multiple notifications
   static final Set<String> _shownCallIds = <String>{};
@@ -29,7 +30,13 @@ class CallkitService {
   bool _ignoringProgrammaticEnd = false;
   Timer? _ignoreEndTimer;
 
-  Function(String callId, String roomId, Map<String, dynamic>? offer, String? callerName)? onCallAccepted;
+  Function(
+    String callId,
+    String roomId,
+    Map<String, dynamic>? offer,
+    String? callerName,
+    bool isVideo,
+  )? onCallAccepted;
   Function(String callId, String roomId)? onCallDeclined;
   Function(String callId)? onCallEndedBySystem;
 
@@ -53,6 +60,7 @@ class CallkitService {
     _lastKnownRoomId = roomId;
     _lastKnownCallId = callId;
     _lastKnownCallerName = callerName;
+    _lastKnownIsVideo = isVideo;
 
     final lang = await PreferencesService.getLanguage();
     final strings = AppStrings(lang);
@@ -77,6 +85,8 @@ class CallkitService {
         'roomId': roomId,
         'callId': callId,
         'callerName': callerName,
+        'isVideo': isVideo,
+        'offer': ?offer,
       },
       headers: <String, dynamic>{'apiKey': '1234'},
       android: AndroidParams(
@@ -93,13 +103,13 @@ class CallkitService {
         isShowCallID: false,
         isShowFullLockedScreen: true,
       ),
-      ios: const IOSParams(
+      ios: IOSParams(
         iconName: 'CallKitLogo',
         handleType: 'generic',
-        supportsVideo: false,
+        supportsVideo: isVideo,
         maximumCallGroups: 1,
         maximumCallsPerCallGroup: 1,
-        audioSessionMode: 'voiceChat',
+        audioSessionMode: isVideo ? 'videoChat' : 'voiceChat',
         audioSessionActive: true,
         audioSessionPreferredSampleRate: 48000.0,
         audioSessionPreferredIOBufferDuration: 0.02,
@@ -136,6 +146,7 @@ class CallkitService {
     _lastKnownCallId = null;
     _lastKnownRoomId = null;
     _lastKnownCallerName = null;
+    _lastKnownIsVideo = false;
     try {
       await FlutterCallkitIncoming.endAllCalls();
     } catch (e) {
@@ -153,11 +164,15 @@ class CallkitService {
         final extra = first.extra;
         String roomId = _lastKnownRoomId ?? '';
         String? callerName = first.nameCaller ?? _lastKnownCallerName;
+        bool isVideo = first.type == 1 || _lastKnownIsVideo;
         Map<String, dynamic>? offerMap;
 
         if (extra != null) {
           roomId = (extra['roomId']?.toString()) ?? roomId;
           callerName = (extra['callerName']?.toString()) ?? callerName;
+          if (extra['isVideo'] != null) {
+            isVideo = extra['isVideo'] == true || extra['isVideo']?.toString() == 'true';
+          }
           final rawOffer = extra['offer'];
           if (rawOffer is Map) {
             offerMap = Map<String, dynamic>.from(rawOffer);
@@ -177,10 +192,16 @@ class CallkitService {
             await NotificationService.clearNotificationsForRoom(roomId);
             return;
           }
+          if (offerMap == null && callDoc['offer'] is Map) {
+            offerMap = Map<String, dynamic>.from(callDoc['offer'] as Map);
+          }
+          if (callDoc['isVideo'] == true) {
+            isVideo = true;
+          }
         }
 
         if (callId.isNotEmpty && roomId.isNotEmpty && onCallAccepted != null) {
-          onCallAccepted!(callId, roomId, offerMap, callerName);
+          onCallAccepted!(callId, roomId, offerMap, callerName, isVideo);
         }
       }
     } catch (e) {
@@ -202,6 +223,10 @@ class CallkitService {
         final callerName = (extra?['callerName']?.toString()) ??
             event.callKitParams.nameCaller ??
             _lastKnownCallerName;
+        final bool isVideo = event.callKitParams.type == 1 ||
+            extra?['isVideo'] == true ||
+            extra?['isVideo']?.toString() == 'true' ||
+            _lastKnownIsVideo;
 
         Map<String, dynamic>? offerMap;
         final rawOffer = extra?['offer'];
@@ -214,7 +239,7 @@ class CallkitService {
         }
 
         if (onCallAccepted != null && (callId.isNotEmpty || roomId.isNotEmpty)) {
-          onCallAccepted!(callId, roomId, offerMap, callerName);
+          onCallAccepted!(callId, roomId, offerMap, callerName, isVideo);
         }
       } else if (event is CallEventActionCallDecline) {
         final extra = event.callKitParams.extra;

@@ -193,8 +193,10 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
             padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
             child: Row(
               children: [
-                const Icon(
-                  Icons.phone_in_talk_rounded,
+                Icon(
+                  callProvider.isVideoCall
+                      ? Icons.videocam_rounded
+                      : Icons.phone_in_talk_rounded,
                   color: Colors.white,
                   size: 20,
                 ),
@@ -291,9 +293,11 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     color: const Color(0xFF159D87).withValues(alpha: 0.2),
                     shape: BoxShape.circle,
                   ),
-                  child: const Icon(
-                    Icons.ring_volume_rounded,
-                    color: Color(0xFF159D87),
+                  child: Icon(
+                    callProvider.incomingIsVideo
+                        ? Icons.videocam_rounded
+                        : Icons.ring_volume_rounded,
+                    color: const Color(0xFF159D87),
                     size: 18,
                   ),
                 ),
@@ -1061,7 +1065,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
           if (_showMatrix)
             Positioned.fill(child: MatrixBackground(color: accent)),
           // Keep audio renderer alive when call is minimized to ChatScreen
-          if (callProvider.isInCall && callProvider.remoteStream != null)
+          if (callProvider.isInCall &&
+              !callProvider.isCallScreenOpen &&
+              callProvider.remoteStream != null)
             SizedBox(
               width: 0,
               height: 0,
