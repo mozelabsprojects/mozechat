@@ -41,6 +41,7 @@ class CallkitService {
     required String roomId,
     required String callId,
     Map<String, dynamic>? offer,
+    bool isVideo = false,
   }) async {
     if (callId.isNotEmpty && _shownCallIds.contains(callId)) {
       return;
@@ -61,8 +62,8 @@ class CallkitService {
       nameCaller: callerName,
       appName: 'Mozechat',
       avatar: '',
-      handle: strings.voiceCallTitle,
-      type: 0, // Audio call
+      handle: isVideo ? strings.videoCallTitle : strings.voiceCallTitle,
+      type: isVideo ? 1 : 0, // 0 = audio call, 1 = video call
       missedCallNotification: const NotificationParams(
         showNotification: false,
         isShowCallback: false,
@@ -86,7 +87,8 @@ class CallkitService {
         backgroundUrl: 'assets/mozechat.png',
         actionColor: '#159D87',
         textColor: '#ffffff',
-        incomingCallNotificationChannelName: strings.incomingVoiceCall,
+        incomingCallNotificationChannelName:
+            isVideo ? strings.incomingVideoCall : strings.incomingVoiceCall,
         missedCallNotificationChannelName: strings.missedCallTitle,
         isShowCallID: false,
         isShowFullLockedScreen: true,

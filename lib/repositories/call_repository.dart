@@ -51,6 +51,7 @@ class CallRepository {
     String callerId,
     Map<String, dynamic> offer, {
     String? callerName,
+    bool isVideo = false,
   }) async {
     final roomId = resolveRoomId(roomCode);
 
@@ -67,9 +68,32 @@ class CallRepository {
       'callerName': callerName ?? 'Unknown',
       'roomCode': roomCode,
       'offer': offer,
+      'isVideo': isVideo,
       'status': 'ringing',
       'createdAt': FieldValue.serverTimestamp(),
     });
+  }
+
+  /// Publish this side's camera on/off state so the peer can show a
+  /// "camera off" placeholder (the video track keeps sending black frames
+  /// otherwise). Field names: `cam_caller` / `cam_callee`.
+  Future<void> setCameraState(
+    String roomCode,
+    String callId,
+    String role,
+    bool isOn,
+  ) async {
+    try {
+      final roomId = resolveRoomId(roomCode);
+      await _firestore
+          .collection('rooms')
+          .doc(roomId)
+          .collection('calls')
+          .doc(callId)
+          .update({'cam_$role': isOn});
+    } catch (e) {
+      debugPrint('setCameraState warning: $e');
+    }
   }
 
   /// Accept a call with an answer

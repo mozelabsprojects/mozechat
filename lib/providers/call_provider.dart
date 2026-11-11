@@ -31,6 +31,12 @@ class CallProvider extends ChangeNotifier {
   bool _isSpeaker = false;
   bool _isCaller = false;
   bool _isCallScreenOpen = false;
+
+  // Video call state
+  bool _isVideoCall = false;
+  bool _isCameraOn = true;
+  bool _isRemoteCameraOn = true;
+  bool _incomingIsVideo = false;
   MediaStream? _localStream;
   MediaStream? _remoteStream;
 
@@ -56,7 +62,7 @@ class CallProvider extends ChangeNotifier {
       _isInCall = true;
       _isCallConnected = true;
       _startDurationTimerIfNeeded();
-      ProximityService.enable();
+      if (!_isVideoCall) ProximityService.enable();
       notifyListeners();
       if (!_isCaller && !_isCallScreenOpen) {
         openCallScreenNow();
@@ -67,7 +73,7 @@ class CallProvider extends ChangeNotifier {
       _isInCall = true;
       _isCallConnected = true;
       _startDurationTimerIfNeeded();
-      ProximityService.enable();
+      if (!_isVideoCall) ProximityService.enable();
       notifyListeners();
       if (!_isCaller && !_isCallScreenOpen) {
         openCallScreenNow();
@@ -76,6 +82,13 @@ class CallProvider extends ChangeNotifier {
 
     _webRTCService.onCallEnded = () {
       _resetCallState();
+    };
+
+    _webRTCService.onRemoteCameraChanged = (isOn) {
+      if (_isRemoteCameraOn != isOn) {
+        _isRemoteCameraOn = isOn;
+        notifyListeners();
+      }
     };
 
     _callkitService.onCallAccepted = (callId, roomId, offer, callerName) async {
@@ -141,6 +154,12 @@ class CallProvider extends ChangeNotifier {
   MediaStream? get localStream => _localStream;
   MediaStream? get remoteStream => _remoteStream;
   RTCVideoRenderer get remoteRenderer => _webRTCService.remoteRenderer;
+  RTCVideoRenderer get localRenderer => _webRTCService.localRenderer;
+  bool get isVideoCall => _isVideoCall;
+  bool get isCameraOn => _isCameraOn;
+  bool get isRemoteCameraOn => _isRemoteCameraOn;
+  bool get isFrontCamera => _webRTCService.isFrontCamera;
+  bool get incomingIsVideo => _incomingIsVideo;
   int get callDurationSeconds => _callDurationSeconds;
 
   bool get hasIncomingRoomCall =>
@@ -226,13 +245,36 @@ class CallProvider extends ChangeNotifier {
     _incomingCallId = null;
     _incomingOffer = null;
     _incomingCallerName = null;
+    _incomingIsVideo = false;
     notifyListeners();
+  }
+
+  static bool _offerHasVideo(Map<String, dynamic>? offer) {
+    final sdp = offer?['sdp']?.toString();
+    return sdp != null && sdp.contains('m=video');
+  }
+
+  /// Video calls: loudspeaker by default (like WhatsApp), screen stays on and
+  /// the proximity sensor must not black out the screen.
+  void _applyVideoModeFromService() {
+    _isVideoCall = _webRTCService.isVideoCall;
+    _isCameraOn = _webRTCService.isCameraOn;
+    _isRemoteCameraOn = true;
+    if (_isVideoCall) {
+      _isSpeaker = true;
+      ProximityService.disable();
+      ProximityService.setKeepScreenOn(true);
+    }
   }
 
   void _resetCallState() {
     ProximityService.disable();
+    ProximityService.setKeepScreenOn(false);
     _durationTimer?.cancel();
     _durationTimer = null;
+    _isVideoCall = false;
+    _isCameraOn = true;
+    _isRemoteCameraOn = true;
     _isInCall = false;
     _isJoiningCall = false;
     _isCallConnected = false;
@@ -284,6 +326,7 @@ class CallProvider extends ChangeNotifier {
         String? foundCallId;
         Map<String, dynamic>? foundOffer;
         String? foundCallerName;
+        bool foundIsVideo = false;
 
         for (final doc in snapshot.docs) {
           final data = doc.data() as Map<String, dynamic>?;
@@ -306,6 +349,7 @@ class CallProvider extends ChangeNotifier {
             foundCallId = doc.id;
             foundOffer = Map<String, dynamic>.from(offer);
             foundCallerName = (data['callerName'] as String?) ?? 'Unknown';
+            foundIsVideo = data['isVideo'] == true || _offerHasVideo(foundOffer);
             break;
           }
         }
@@ -314,6 +358,7 @@ class CallProvider extends ChangeNotifier {
           _incomingCallId = foundCallId;
           _incomingOffer = foundOffer;
           _incomingCallerName = foundCallerName;
+          _incomingIsVideo = foundIsVideo;
           notifyListeners();
         }
       },
@@ -347,6 +392,8 @@ class CallProvider extends ChangeNotifier {
     String? targetCallId = callId ?? _incomingCallId;
     Map<String, dynamic>? targetOffer = offer ?? _incomingOffer;
     String? targetCallerName = callerName ?? _incomingCallerName;
+    final bool earlyVideo = _offerHasVideo(targetOffer) ||
+        (offer == null && callId == null && _incomingIsVideo);
 
     // Immediately transition state and open CallScreen so tapping feels instant (0ms latency)
     _isJoiningCall = true;
@@ -354,14 +401,22 @@ class CallProvider extends ChangeNotifier {
     _isCallConnected = false;
     _isCaller = false;
     _isMuted = false;
-    _isSpeaker = false;
+    _isSpeaker = earlyVideo;
+    _isVideoCall = earlyVideo;
+    _isCameraOn = earlyVideo;
+    _isRemoteCameraOn = true;
     _callDurationSeconds = 0;
     _callStartTime = DateTime.now();
     _currentRoomCode = targetRoom;
     _incomingCallId = null;
     _incomingOffer = null;
     _incomingCallerName = null;
-    ProximityService.enable();
+    _incomingIsVideo = false;
+    if (earlyVideo) {
+      ProximityService.setKeepScreenOn(true);
+    } else {
+      ProximityService.enable();
+    }
     notifyListeners();
 
     if (openCallScreen) {
@@ -378,7 +433,12 @@ class CallProvider extends ChangeNotifier {
     );
     notifyListeners();
 
-    await [Permission.microphone, Permission.bluetoothConnect].request();
+    final permissions = await [
+      Permission.microphone,
+      Permission.camera,
+      Permission.bluetoothConnect,
+    ].request();
+    final bool cameraAllowed = permissions[Permission.camera]?.isGranted ?? false;
     _currentUserNickname = await PreferencesService.getNickname() ?? 'Unknown';
 
     // If offer or callId wasn't cached (e.g. tapped from CallKit or chat message bubble), fetch from Firestore
@@ -400,8 +460,14 @@ class CallProvider extends ChangeNotifier {
         final docCaller = callDoc['callerName']?.toString();
         if (docCaller != null && docCaller.isNotEmpty) {
           _peerDisplayName = await _resolveDisplayName(targetRoom, preferredName: docCaller);
-          notifyListeners();
         }
+        if (!_isVideoCall && (callDoc['isVideo'] == true || _offerHasVideo(targetOffer))) {
+          _isVideoCall = true;
+          _isSpeaker = true;
+          ProximityService.disable();
+          ProximityService.setKeepScreenOn(true);
+        }
+        notifyListeners();
       }
     }
 
@@ -411,7 +477,12 @@ class CallProvider extends ChangeNotifier {
       return;
     }
 
-    final ok = await _webRTCService.joinCall(targetRoom, targetCallId, targetOffer);
+    final ok = await _webRTCService.joinCall(
+      targetRoom,
+      targetCallId,
+      targetOffer,
+      cameraAllowed: cameraAllowed,
+    );
     if (!ok) {
       _resetCallState();
       return;
@@ -420,6 +491,7 @@ class CallProvider extends ChangeNotifier {
     _isJoiningCall = false;
     _isInCall = true;
     _localStream = _webRTCService.localStream;
+    _applyVideoModeFromService();
     _webRTCService.toggleSpeaker(_isSpeaker);
     _startDurationTimerIfNeeded();
     notifyListeners();
@@ -443,12 +515,14 @@ class CallProvider extends ChangeNotifier {
     }
   }
 
-  /// Start a new outgoing call (or join if the other person just called this room)
+  /// Start a new outgoing call (or join if the other person just called this room).
+  /// Pass [video] = true for a video call.
   Future<void> startCall(
     String roomCode,
     String callerId,
     String nickname, {
     bool openCallScreen = true,
+    bool video = false,
   }) async {
     if (_isInCall || _isJoiningCall) {
       if (openCallScreen) openCallScreenNow();
@@ -466,13 +540,20 @@ class CallProvider extends ChangeNotifier {
     _isCallConnected = false;
     _isCaller = true;
     _isMuted = false;
-    _isSpeaker = false;
+    _isVideoCall = video;
+    _isCameraOn = video;
+    _isRemoteCameraOn = true;
+    _isSpeaker = video;
     _callDurationSeconds = 0;
     _callStartTime = null;
     _currentRoomCode = roomCode;
     _currentUserNickname = nickname;
     _clearIncomingBannerState();
-    ProximityService.enable();
+    if (video) {
+      ProximityService.setKeepScreenOn(true);
+    } else {
+      ProximityService.enable();
+    }
     notifyListeners();
 
     if (openCallScreen) {
@@ -482,7 +563,24 @@ class CallProvider extends ChangeNotifier {
     _peerDisplayName = await _resolveDisplayName(roomCode);
     notifyListeners();
 
-    await [Permission.microphone, Permission.bluetoothConnect].request();
+    final permissions = await [
+      Permission.microphone,
+      if (video) Permission.camera,
+      Permission.bluetoothConnect,
+    ].request();
+    final bool cameraAllowed = permissions[Permission.camera]?.isGranted ?? false;
+
+    // Without camera permission, gracefully downgrade to a normal voice call
+    bool effectiveVideo = video;
+    if (video && !cameraAllowed) {
+      effectiveVideo = false;
+      _isVideoCall = false;
+      _isCameraOn = false;
+      _isSpeaker = false;
+      ProximityService.setKeepScreenOn(false);
+      ProximityService.enable();
+      notifyListeners();
+    }
 
     // Check Firestore in case the peer just created a ringing call milliseconds ago
     final existingRinging = await _callRepository.getLatestRingingCall(
@@ -495,7 +593,12 @@ class CallProvider extends ChangeNotifier {
       _callStartTime = DateTime.now();
       final cId = existingRinging['callId'].toString();
       final cOffer = Map<String, dynamic>.from(existingRinging['offer'] as Map);
-      final ok = await _webRTCService.joinCall(roomCode, cId, cOffer);
+      final ok = await _webRTCService.joinCall(
+        roomCode,
+        cId,
+        cOffer,
+        cameraAllowed: cameraAllowed,
+      );
       _isJoiningCall = false;
       if (!ok) {
         _resetCallState();
@@ -503,6 +606,7 @@ class CallProvider extends ChangeNotifier {
       }
       _isInCall = true;
       _localStream = _webRTCService.localStream;
+      _applyVideoModeFromService();
       _webRTCService.toggleSpeaker(_isSpeaker);
       _startDurationTimerIfNeeded();
       notifyListeners();
@@ -516,6 +620,7 @@ class CallProvider extends ChangeNotifier {
       roomCode,
       callerId,
       callerName: nickname,
+      video: effectiveVideo,
     );
 
     if (createdCallId == null) {
@@ -525,6 +630,7 @@ class CallProvider extends ChangeNotifier {
 
     _isInCall = true;
     _localStream = _webRTCService.localStream;
+    _applyVideoModeFromService();
     _webRTCService.toggleSpeaker(_isSpeaker);
     notifyListeners();
 
@@ -533,13 +639,14 @@ class CallProvider extends ChangeNotifier {
     }
 
     // Send the call started message in the background AFTER the WebRTC call document exists in Firestore!
+    final bool announceVideo = effectiveVideo;
     unawaited(() async {
       try {
         final lang = await PreferencesService.getLanguage();
         final strings = AppStrings(lang);
         await ChatRepository().sendMessage(
           roomCode,
-          strings.voiceCallStartedMsg,
+          announceVideo ? strings.videoCallStartedMsg : strings.voiceCallStartedMsg,
           nickname,
         );
       } catch (e) {
@@ -552,6 +659,7 @@ class CallProvider extends ChangeNotifier {
     final wasInCall = _isInCall;
     final wasConnected = _isCallConnected || _remoteStream != null;
     final wasCaller = _isCaller;
+    final wasVideo = _isVideoCall;
     final startTime = _callStartTime;
     final roomCode = _currentRoomCode;
     final nickname = _currentUserNickname;
@@ -574,13 +682,27 @@ class CallProvider extends ChangeNotifier {
         final strings = AppStrings(lang);
         await ChatRepository().sendMessage(
           roomCode,
-          strings.voiceCallEndedMsg(timeStr),
+          wasVideo ? strings.videoCallEndedMsg(timeStr) : strings.voiceCallEndedMsg(timeStr),
           nickname,
         );
       } catch (e) {
         debugPrint('Error sending call end message: $e');
       }
     }
+  }
+
+  /// Turn the local camera on/off during a video call
+  void toggleCamera() {
+    if (!_isVideoCall) return;
+    _isCameraOn = !_isCameraOn;
+    _webRTCService.setCameraEnabled(_isCameraOn);
+    notifyListeners();
+  }
+
+  Future<void> switchCamera() async {
+    if (!_isVideoCall || !_isCameraOn) return;
+    await _webRTCService.switchCamera();
+    notifyListeners();
   }
 
   void toggleMute() {

@@ -621,6 +621,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
       final chatProvider = context.read<ChatProvider>();
       final lowerText = widget.msg.text.toLowerCase();
       final isEnded = lowerText.contains('sonlandırıldı') || lowerText.contains('ended');
+      final isVideoMsg = lowerText.contains('görüntülü') || lowerText.contains('video');
       final isRecent = DateTime.now().difference(widget.msg.timestamp).inSeconds < 90;
       final canJoinActive = !isEnded &&
           (callProvider.hasIncomingRoomCall ||
@@ -632,10 +633,14 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
         final durMatch = RegExp(r'(\d{2}:\d{2}|\d+m\s*\d+s)').firstMatch(widget.msg.text);
         final dur = durMatch?.group(1);
         cleanText = dur != null
-            ? strings.callEndedMsg(dur).replaceFirst('📞', '').trim()
+            ? (isVideoMsg ? strings.videoCallEndedMsg(dur) : strings.callEndedMsg(dur))
+                .replaceFirst('📞', '')
+                .trim()
             : widget.msg.text.replaceFirst('📞', '').trim();
       } else {
-        cleanText = strings.callStartedMsg.replaceFirst('📞', '').trim();
+        cleanText = (isVideoMsg ? strings.videoCallStartedMsg : strings.callStartedMsg)
+            .replaceFirst('📞', '')
+            .trim();
       }
 
       return GestureDetector(
@@ -661,6 +666,7 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
               uid,
               nick,
               openCallScreen: true,
+              video: isVideoMsg,
             );
           }
         },
@@ -677,7 +683,9 @@ class _MessageBubbleState extends State<MessageBubble> with SingleTickerProvider
                   shape: BoxShape.circle,
                 ),
                 child: Icon(
-                  isEnded ? Icons.call_end_rounded : Icons.phone_in_talk_rounded,
+                  isEnded
+                      ? Icons.call_end_rounded
+                      : (isVideoMsg ? Icons.videocam_rounded : Icons.phone_in_talk_rounded),
                   size: 18,
                   color: isEnded
                       ? widget.textColor.withValues(alpha: 0.7)

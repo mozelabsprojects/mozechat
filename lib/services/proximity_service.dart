@@ -45,5 +45,13 @@ class ProximityService {
       await _channel.invokeMethod('disableProximity');
     } catch (_) {}
   }
+
+  /// Keeps the display awake (used during video calls where the screen must
+  /// stay on and the proximity sensor must NOT turn it off).
+  static Future<void> setKeepScreenOn(bool keepOn) async {
+    try {
+      await _channel.invokeMethod('keepScreenOn', keepOn);
+    } catch (_) {}
+  }
 }
 

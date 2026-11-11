@@ -35,19 +35,29 @@ class WebRTCService {
     ],
   };
 
-  final Map<String, dynamic> _offerSdpConstraints = {
-    'mandatory': {
-      'OfferToReceiveAudio': true,
-      'OfferToReceiveVideo': false,
-    },
-    'optional': [
-      {'DtlsSrtpKeyAgreement': true},
-    ],
-  };
+  Map<String, dynamic> _sdpConstraints({required bool video}) => {
+        'mandatory': {
+          'OfferToReceiveAudio': true,
+          'OfferToReceiveVideo': video,
+        },
+        'optional': [
+          {'DtlsSrtpKeyAgreement': true},
+        ],
+      };
+
+  /// Hard cap for the video stream (kbps). 640x480@24fps looks good at ~500kbps,
+  /// which keeps mobile data usage low (~3.7 MB/min) while staying smooth.
+  static const int _maxVideoBitrateKbps = 550;
 
   String? _roomId;
   String? _callId;
   String? _role;
+
+  bool _isVideoCall = false;
+  bool _isCameraOn = true;
+  bool _isFrontCamera = true;
+  final RTCVideoRenderer _localRenderer = RTCVideoRenderer();
+  bool _localRendererInitialized = false;
 
   bool _hasSetRemoteDescription = false;
   bool _isEndingCall = false;
@@ -57,12 +67,17 @@ class WebRTCService {
   Function(RTCPeerConnectionState state)? onConnectionState;
   Function()? onCallConnected;
   Function()? onCallEnded;
+  Function(bool isOn)? onRemoteCameraChanged;
 
   String? get currentCallId => _callId;
   String? get currentRoomId => _roomId;
   MediaStream? get localStream => _localStream;
   MediaStream? get remoteStream => _remoteStream;
   RTCVideoRenderer get remoteRenderer => _remoteRenderer;
+  RTCVideoRenderer get localRenderer => _localRenderer;
+  bool get isVideoCall => _isVideoCall;
+  bool get isCameraOn => _isCameraOn;
+  bool get isFrontCamera => _isFrontCamera;
 
   Future<void> _ensureRendererInitialized() async {
     if (!_rendererInitialized) {
@@ -73,6 +88,47 @@ class WebRTCService {
         debugPrint('RTCVideoRenderer init warning: $e');
       }
     }
+    if (!_localRendererInitialized) {
+      try {
+        await _localRenderer.initialize();
+        _localRendererInitialized = true;
+      } catch (e) {
+        debugPrint('Local RTCVideoRenderer init warning: $e');
+      }
+    }
+  }
+
+  /// Cap the video m-section bandwidth with `b=AS:` so data usage stays low.
+  String _limitVideoBitrate(String sdp) {
+    final lines = sdp.split('\r\n');
+    final out = <String>[];
+    bool inVideo = false;
+    bool bitrateInserted = false;
+    for (final line in lines) {
+      if (line.startsWith('m=')) {
+        inVideo = line.startsWith('m=video');
+        bitrateInserted = false;
+      }
+      if (inVideo && line.startsWith('b=AS:')) {
+        // Replace any existing limit with ours
+        out.add('b=AS:$_maxVideoBitrateKbps');
+        bitrateInserted = true;
+        continue;
+      }
+      out.add(line);
+      if (inVideo && !bitrateInserted && line.startsWith('c=')) {
+        out.add('b=AS:$_maxVideoBitrateKbps');
+        bitrateInserted = true;
+      }
+    }
+    return out.join('\r\n');
+  }
+
+  /// Optimize Opus (and, for video calls, VP8/H264 bandwidth) SDP parameters
+  String _optimizeSdp(String? sdp, {required bool video}) {
+    final voiceOptimized = _optimizeSdpForVoice(sdp);
+    if (!video || voiceOptimized.isEmpty) return voiceOptimized;
+    return _limitVideoBitrate(voiceOptimized);
   }
 
   /// Optimize Opus SDP parameters to prevent crackling, echo, and packet-loss distortion
@@ -120,11 +176,12 @@ class WebRTCService {
     }
   }
 
-  /// Initiate an outgoing call
+  /// Initiate an outgoing call (voice by default, or video when [video] is true)
   Future<String?> startCall(
     String roomCode,
     String callerId, {
     String? callerName,
+    bool video = false,
   }) async {
     try {
       await _prepareSession();
@@ -132,22 +189,20 @@ class WebRTCService {
       _roomId = roomCode;
       _callId = const Uuid().v4();
       _role = 'caller';
+      _isVideoCall = video;
+      _isCameraOn = video;
+      _isFrontCamera = true;
 
-      await _initLocalStream();
+      await _initLocalStream(video: video);
       _peerConnection = await createPeerConnection(_configuration);
       _setupPeerConnectionListeners();
+      await _addLocalTracks();
 
-      if (_localStream != null) {
-        for (var track in _localStream!.getAudioTracks()) {
-          track.enabled = true;
-          await _peerConnection!.addTrack(track, _localStream!);
-        }
-      }
-
-      RTCSessionDescription offer = await _peerConnection!.createOffer(_offerSdpConstraints);
+      RTCSessionDescription offer =
+          await _peerConnection!.createOffer(_sdpConstraints(video: _isVideoCall));
       RTCSessionDescription localDesc = offer;
       try {
-        final optimizedSdp = _optimizeSdpForVoice(offer.sdp);
+        final optimizedSdp = _optimizeSdp(offer.sdp, video: _isVideoCall);
         final candidateOffer = RTCSessionDescription(optimizedSdp, offer.type);
         await _peerConnection!.setLocalDescription(candidateOffer);
         localDesc = candidateOffer;
@@ -165,6 +220,7 @@ class WebRTCService {
           'type': localDesc.type,
         },
         callerName: callerName,
+        isVideo: _isVideoCall,
       );
 
       // Start 45s ringing timeout in case callee never answers
@@ -184,12 +240,15 @@ class WebRTCService {
     }
   }
 
-  /// Answer an incoming call
+  /// Answer an incoming call. Video is detected from the offer SDP (`m=video`).
+  /// When [cameraAllowed] is false the callee still receives the caller's video
+  /// but sends audio only.
   Future<bool> joinCall(
     String roomCode,
     String callId,
-    Map<String, dynamic> offer,
-  ) async {
+    Map<String, dynamic> offer, {
+    bool cameraAllowed = true,
+  }) async {
     try {
       await _prepareSession();
 
@@ -197,32 +256,31 @@ class WebRTCService {
       _callId = callId;
       _role = 'callee';
 
-      await _initLocalStream();
-      _peerConnection = await createPeerConnection(_configuration);
-      _setupPeerConnectionListeners();
-
-      if (_localStream != null) {
-        for (var track in _localStream!.getAudioTracks()) {
-          track.enabled = true;
-          await _peerConnection!.addTrack(track, _localStream!);
-        }
-      }
-
       final sdp = offer['sdp']?.toString();
       final type = offer['type']?.toString() ?? 'offer';
       if (sdp == null || sdp.isEmpty) {
         throw Exception('Invalid offer SDP');
       }
 
+      _isVideoCall = sdp.contains('m=video');
+      _isCameraOn = _isVideoCall && cameraAllowed;
+      _isFrontCamera = true;
+
+      await _initLocalStream(video: _isVideoCall && cameraAllowed);
+      _peerConnection = await createPeerConnection(_configuration);
+      _setupPeerConnectionListeners();
+      await _addLocalTracks();
+
       await _peerConnection!.setRemoteDescription(
         RTCSessionDescription(sdp, type),
       );
       _hasSetRemoteDescription = true;
 
-      RTCSessionDescription answer = await _peerConnection!.createAnswer(_offerSdpConstraints);
+      RTCSessionDescription answer =
+          await _peerConnection!.createAnswer(_sdpConstraints(video: _isVideoCall));
       RTCSessionDescription localAnswer = answer;
       try {
-        final optimizedSdp = _optimizeSdpForVoice(answer.sdp);
+        final optimizedSdp = _optimizeSdp(answer.sdp, video: _isVideoCall);
         final candidateAnswer = RTCSessionDescription(optimizedSdp, answer.type);
         await _peerConnection!.setLocalDescription(candidateAnswer);
         localAnswer = candidateAnswer;
@@ -235,6 +293,10 @@ class WebRTCService {
         'sdp': localAnswer.sdp,
         'type': localAnswer.type,
       });
+      if (_isVideoCall && !_isCameraOn) {
+        // Joined a video call without camera permission: tell the caller
+        unawaited(_callRepository.setCameraState(_roomId!, _callId!, 'callee', false));
+      }
 
       _processQueuedCandidates();
       // Both caller and callee MUST listen to the call document for remote hang-up!
@@ -245,6 +307,21 @@ class WebRTCService {
       debugPrint('WebRTC joinCall error: $e');
       await endCall();
       return false;
+    }
+  }
+
+  Future<void> _addLocalTracks() async {
+    final stream = _localStream;
+    if (stream == null || _peerConnection == null) return;
+    for (final track in stream.getAudioTracks()) {
+      track.enabled = true;
+      await _peerConnection!.addTrack(track, stream);
+    }
+    if (_isVideoCall) {
+      for (final track in stream.getVideoTracks()) {
+        track.enabled = true;
+        await _peerConnection!.addTrack(track, stream);
+      }
     }
   }
 
@@ -332,6 +409,9 @@ class WebRTCService {
         }
         if (_rendererInitialized && _remoteRenderer.srcObject != _remoteStream) {
           _remoteRenderer.srcObject = _remoteStream;
+        } else if (_rendererInitialized && event.track.kind == 'video') {
+          // Re-attach so the renderer binds to the video track that just arrived
+          _remoteRenderer.srcObject = _remoteStream;
         }
         if (onRemoteStreamAdded != null) {
           onRemoteStreamAdded!(_remoteStream!);
@@ -340,38 +420,54 @@ class WebRTCService {
     };
   }
 
-  Future<void> _initLocalStream() async {
+  Future<void> _initLocalStream({bool video = false}) async {
     // Use both mandatory/optional format (required by Android flutter_webrtc MediaConstraintsUtils)
     // and standard keys for cross-platform compatibility.
-    final Map<String, dynamic> mediaConstraints = {
-      'audio': {
-        'mandatory': <String, dynamic>{},
-        'optional': <Map<String, dynamic>>[
-          {'echoCancellation': true},
-          {'googEchoCancellation': true},
-          {'googEchoCancellation2': true},
-          {'googDAEchoCancellation': true},
-          {'noiseSuppression': true},
-          {'googNoiseSuppression': true},
-          {'googNoiseSuppression2': true},
-          {'autoGainControl': true},
-          {'googAutoGainControl': true},
-          {'googAutoGainControl2': true},
-          {'googHighpassFilter': true},
-          {'googTypingNoiseDetection': true},
-          {'googAudioMirroring': false},
-        ],
-      },
-      'video': false,
+    final Map<String, dynamic> audioConstraints = {
+      'mandatory': <String, dynamic>{},
+      'optional': <Map<String, dynamic>>[
+        {'echoCancellation': true},
+        {'googEchoCancellation': true},
+        {'googEchoCancellation2': true},
+        {'googDAEchoCancellation': true},
+        {'noiseSuppression': true},
+        {'googNoiseSuppression': true},
+        {'googNoiseSuppression2': true},
+        {'autoGainControl': true},
+        {'googAutoGainControl': true},
+        {'googAutoGainControl2': true},
+        {'googHighpassFilter': true},
+        {'googTypingNoiseDetection': true},
+        {'googAudioMirroring': false},
+      ],
     };
+
+    // Light-weight 480p@24fps capture: great quality on phones, low CPU/battery/data
+    final Map<String, dynamic> videoConstraints = {
+      'mandatory': <String, dynamic>{
+        'minWidth': '640',
+        'minHeight': '480',
+        'minFrameRate': '24',
+      },
+      'facingMode': 'user',
+      'optional': <Map<String, dynamic>>[],
+    };
+
     try {
-      _localStream = await navigator.mediaDevices.getUserMedia(mediaConstraints);
+      _localStream = await navigator.mediaDevices.getUserMedia({
+        'audio': audioConstraints,
+        'video': video ? videoConstraints : false,
+      });
     } catch (e) {
-      debugPrint('Fallback to default audio constraints: $e');
+      debugPrint('Fallback to default media constraints: $e');
       _localStream = await navigator.mediaDevices.getUserMedia({
         'audio': true,
-        'video': false,
+        'video': video ? {'facingMode': 'user'} : false,
       });
+    }
+
+    if (video && _localRendererInitialized) {
+      _localRenderer.srcObject = _localStream;
     }
   }
 
@@ -409,6 +505,15 @@ class WebRTCService {
       if (status == 'connected') {
         _ringingTimeoutTimer?.cancel();
         if (onCallConnected != null) onCallConnected!();
+      }
+
+      // Peer camera on/off state (video calls only)
+      if (_isVideoCall && _role != null) {
+        final remoteRole = _role == 'caller' ? 'callee' : 'caller';
+        final remoteCam = data['cam_$remoteRole'];
+        if (remoteCam is bool && onRemoteCameraChanged != null) {
+          onRemoteCameraChanged!(remoteCam);
+        }
       }
 
       if (_role == 'caller' && !_hasSetRemoteDescription && data.containsKey('answer')) {
@@ -484,6 +589,9 @@ class WebRTCService {
       if (_rendererInitialized) {
         _remoteRenderer.srcObject = null;
       }
+      if (_localRendererInitialized) {
+        _localRenderer.srcObject = null;
+      }
     } catch (_) {}
 
     try {
@@ -543,6 +651,9 @@ class WebRTCService {
     }
 
     _isEndingCall = false;
+    _isVideoCall = false;
+    _isCameraOn = true;
+    _isFrontCamera = true;
     if (onCallEnded != null) onCallEnded!();
   }
 
@@ -551,6 +662,34 @@ class WebRTCService {
       for (var track in _localStream!.getAudioTracks()) {
         track.enabled = !isMuted;
       }
+    }
+  }
+
+  /// Turn the local camera on/off without renegotiation (track.enabled) and
+  /// tell the peer so it can render a "camera off" placeholder.
+  void setCameraEnabled(bool enabled) {
+    if (!_isVideoCall) return;
+    _isCameraOn = enabled;
+    final stream = _localStream;
+    if (stream != null) {
+      for (final track in stream.getVideoTracks()) {
+        track.enabled = enabled;
+      }
+    }
+    if (_roomId != null && _callId != null && _role != null) {
+      unawaited(_callRepository.setCameraState(_roomId!, _callId!, _role!, enabled));
+    }
+  }
+
+  Future<void> switchCamera() async {
+    if (!_isVideoCall) return;
+    final tracks = _localStream?.getVideoTracks() ?? const <MediaStreamTrack>[];
+    if (tracks.isEmpty) return;
+    try {
+      await Helper.switchCamera(tracks.first);
+      _isFrontCamera = !_isFrontCamera;
+    } catch (e) {
+      debugPrint('switchCamera error: $e');
     }
   }
 

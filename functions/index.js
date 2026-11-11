@@ -102,6 +102,7 @@ exports.sendNewCallNotification = onDocumentCreated("rooms/{roomId}/calls/{callI
             callId: callId,
             callerId: callerId || "",
             callerName: callerName,
+            isVideo: callData.isVideo === true ? "true" : "false",
             // FCM data payload is limited to 4KB; if offer is large, client fetches from Firestore
             offer: offerStr.length < 2500 ? offerStr : "",
         }

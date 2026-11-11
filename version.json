@@ -1,7 +1,7 @@
 {
-  "version": "0.2.4",
-  "versionCode": 10,
+  "version": "0.3.0",
+  "versionCode": 11,
   "downloadUrl": "https://github.com/mozelabsprojects/mozechat/releases/latest/download/app-release.apk",
-  "changelog": "• 🎙️ Normal Sesli Mesajlar: Robotik/anonim ses filtresi ve ayarı tamamen kaldırıldı, tüm ses kayıtları doğal orijinal sesle gönderiliyor\n• 📱 Kulağa Götürünce Ekran Karartma (Proximity Sensor): Sesli arama esnasında telefon kulağa götürüldüğünde ekran otomatik kararır ve dokunmatik kilitlenerek kulakla yanlışlıkla aramayı kapatma veya butonlara basma engellenir\n• 💬 Sohbet Üst Barı Sadeleştirmesi: Arama büyüteci hariç diğer butonlar 3 nokta menüsüne taşındı; 'Çevrimiçi' ve 'Son görülme' yazıları artık ferahça ve net şekilde okunuyor",
+  "changelog": "• 🎥 Uçtan Uca Şifreli Görüntülü Arama: Sohbet menüsünden tek dokunuşla WebRTC (DTLS-SRTP) şifreli görüntülü konuşma\n• 📱 WhatsApp Tarzı Arayüz: Tam ekran karşı taraf videosu, küçük kendi kamera penceresi, kamera aç/kapat, ön/arka kamera çevirme\n• 📉 Veri Tasarrufu: 480p@24fps, 550 kbps sınırlı video; sesli aramalar aynı hafif yapıda çalışmaya devam ediyor\n• 🔔 Gelen aramada 'Görüntülü Arama' bildirimi ve sohbette görüntülü arama kaydı",
   "forceUpdate": false
 }

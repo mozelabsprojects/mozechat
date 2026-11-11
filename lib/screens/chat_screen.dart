@@ -205,7 +205,7 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                     mainAxisSize: MainAxisSize.min,
                     children: [
                       Text(
-                        '${strings.ongoingVoiceCallBanner} • ${callProvider.formattedDuration}',
+                        '${callProvider.isVideoCall ? strings.ongoingVideoCall : strings.ongoingVoiceCallBanner} • ${callProvider.formattedDuration}',
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.bold,
@@ -314,7 +314,9 @@ class _ChatScreenState extends State<ChatScreen> with WidgetsBindingObserver {
                         overflow: TextOverflow.ellipsis,
                       ),
                       Text(
-                        strings.incomingVoiceCall,
+                        callProvider.incomingIsVideo
+                            ? strings.incomingVideoCall
+                            : strings.incomingVoiceCall,
                         style: const TextStyle(
                           color: Color(0xFF159D87),
                           fontSize: 11,

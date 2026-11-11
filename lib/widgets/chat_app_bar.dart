@@ -58,7 +58,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
     return DateFormat('MMM d, HH:mm').format(lastSeen);
   }
 
-  Future<void> _handleCallAction(BuildContext context) async {
+  Future<void> _handleCallAction(BuildContext context, {bool video = false}) async {
     final chatProvider = context.read<ChatProvider>();
     final callProvider = context.read<CallProvider>();
     final strings = context.read<LocaleProvider>().strings;
@@ -83,6 +83,7 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
         chatProvider.currentUserId!,
         chatProvider.nickname ?? strings.unknownUser,
         openCallScreen: true,
+        video: video,
       );
     } catch (e) {
       debugPrint('Start call failed: $e');
@@ -331,6 +332,8 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
           onSelected: (value) async {
             if (value == 'call') {
               await _handleCallAction(context);
+            } else if (value == 'video_call') {
+              await _handleCallAction(context, video: true);
             } else if (value == 'qr') {
               if (chatProvider.roomCode != null) {
                 QRDialog.show(
@@ -375,6 +378,13 @@ class ChatAppBar extends StatelessWidget implements PreferredSizeWidget {
               child: ListTile(
                 leading: const Icon(Icons.phone, color: Color(0xFF159D87)),
                 title: Text(strings.voiceCallTitle),
+              ),
+            ),
+            PopupMenuItem(
+              value: 'video_call',
+              child: ListTile(
+                leading: const Icon(Icons.videocam_rounded, color: Color(0xFF159D87)),
+                title: Text(strings.startVideoCall),
               ),
             ),
             PopupMenuItem(

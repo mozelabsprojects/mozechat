@@ -6,6 +6,7 @@ import '../providers/call_provider.dart';
 import '../providers/locale_provider.dart';
 import '../providers/theme_provider.dart';
 import '../services/proximity_service.dart';
+import '../utils/app_strings.dart';
 
 class CallScreen extends StatefulWidget {
   const CallScreen({super.key});
@@ -25,8 +26,12 @@ class _CallScreenState extends State<CallScreen>
   @override
   void initState() {
     super.initState();
-    ProximityService.enable();
-    _isNear = ProximityService.isNear;
+    // Video calls keep the screen on; only voice calls use the proximity sensor
+    final isVideo = context.read<CallProvider>().isVideoCall;
+    if (!isVideo) {
+      ProximityService.enable();
+    }
+    _isNear = isVideo ? false : ProximityService.isNear;
     _proximitySub = ProximityService.proximityStream.listen((near) {
       if (mounted && _isNear != near) {
         setState(() => _isNear = near);
@@ -118,6 +123,18 @@ class _CallScreenState extends State<CallScreen>
     final secondaryTextColor = isDark
         ? Colors.white.withValues(alpha: 0.65)
         : const Color(0xFF54656F);
+
+    if (callProvider.isVideoCall) {
+      return _buildVideoCallLayout(
+        context: context,
+        callProvider: callProvider,
+        strings: strings,
+        accentColor: accentColor,
+        displayName: displayName,
+        statusText: statusText,
+        isConnected: isConnected,
+      );
+    }
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -470,6 +487,319 @@ class _CallScreenState extends State<CallScreen>
     ],
   ),
 );
+  }
+
+  /// WhatsApp-style full-screen video call: remote video fills the screen,
+  /// local camera is a small picture-in-picture, controls float at the bottom.
+  Widget _buildVideoCallLayout({
+    required BuildContext context,
+    required CallProvider callProvider,
+    required AppStrings strings,
+    required Color accentColor,
+    required String displayName,
+    required String statusText,
+    required bool isConnected,
+  }) {
+    final remote = callProvider.remoteStream;
+    final bool remoteHasVideo =
+        remote != null && remote.getVideoTracks().isNotEmpty;
+    final bool showRemoteVideo =
+        isConnected && remoteHasVideo && callProvider.isRemoteCameraOn;
+    // While ringing/connecting show our own camera full-screen, like WhatsApp
+    final bool showLocalFull = !isConnected && callProvider.isCameraOn;
+    final topInset = MediaQuery.of(context).padding.top;
+
+    Widget background;
+    if (showRemoteVideo) {
+      background = RTCVideoView(
+        callProvider.remoteRenderer,
+        objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+      );
+    } else if (showLocalFull) {
+      background = Stack(
+        fit: StackFit.expand,
+        children: [
+          RTCVideoView(
+            callProvider.localRenderer,
+            mirror: callProvider.isFrontCamera,
+            objectFit: RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+          ),
+          Container(color: Colors.black.withValues(alpha: 0.25)),
+        ],
+      );
+    } else {
+      background = Container(
+        decoration: const BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF0B1014), Color(0xFF151E25)],
+          ),
+        ),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 112,
+              height: 112,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: accentColor.withValues(alpha: 0.18),
+                border: Border.all(
+                  color: accentColor.withValues(alpha: 0.6),
+                  width: 2,
+                ),
+              ),
+              alignment: Alignment.center,
+              child: Text(
+                _extractInitials(displayName),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 32,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+            if (isConnected && !callProvider.isRemoteCameraOn) ...[
+              const SizedBox(height: 16),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.videocam_off_rounded,
+                      size: 18, color: Colors.white70),
+                  const SizedBox(width: 6),
+                  Text(
+                    strings.peerCameraOff,
+                    style: const TextStyle(color: Colors.white70, fontSize: 14),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
+    }
+
+    return Scaffold(
+      backgroundColor: const Color(0xFF0B1014),
+      body: Stack(
+        children: [
+          Positioned.fill(child: background),
+
+          // Top gradient + header
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: EdgeInsets.fromLTRB(12, topInset + 8, 12, 24),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.6),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: Row(
+                children: [
+                  Material(
+                    color: Colors.white.withValues(alpha: 0.14),
+                    shape: const CircleBorder(),
+                    child: IconButton(
+                      icon: const Icon(
+                        Icons.keyboard_arrow_down_rounded,
+                        size: 28,
+                        color: Colors.white,
+                      ),
+                      tooltip: strings.tapToReturnToCall,
+                      onPressed: _minimizeCallScreen,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          displayName,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 19,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        const SizedBox(height: 2),
+                        Row(
+                          children: [
+                            Icon(Icons.lock_rounded,
+                                size: 12,
+                                color: Colors.white.withValues(alpha: 0.75)),
+                            const SizedBox(width: 4),
+                            Text(
+                              statusText,
+                              style: TextStyle(
+                                color: Colors.white.withValues(alpha: 0.85),
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                                fontFeatures: const [
+                                  FontFeature.tabularFigures(),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+
+          // Local camera picture-in-picture (only once the call is connected)
+          if (isConnected)
+            Positioned(
+              top: topInset + 72,
+              right: 14,
+              child: GestureDetector(
+                onTap: () => context.read<CallProvider>().switchCamera(),
+                child: Container(
+                  width: 104,
+                  height: 148,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF151E25),
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: Colors.white.withValues(alpha: 0.25),
+                      width: 1.2,
+                    ),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.4),
+                        blurRadius: 10,
+                      ),
+                    ],
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: callProvider.isCameraOn
+                      ? RTCVideoView(
+                          callProvider.localRenderer,
+                          mirror: callProvider.isFrontCamera,
+                          objectFit:
+                              RTCVideoViewObjectFit.RTCVideoViewObjectFitCover,
+                        )
+                      : const Center(
+                          child: Icon(
+                            Icons.videocam_off_rounded,
+                            color: Colors.white54,
+                            size: 28,
+                          ),
+                        ),
+                ),
+              ),
+            ),
+
+          // Bottom gradient + floating controls
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: EdgeInsets.fromLTRB(
+                18,
+                36,
+                18,
+                MediaQuery.of(context).padding.bottom + 18,
+              ),
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.7),
+                    Colors.transparent,
+                  ],
+                ),
+              ),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 10),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF151E25).withValues(alpha: 0.88),
+                  borderRadius: BorderRadius.circular(32),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.08),
+                  ),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    _buildControlAction(
+                      icon: callProvider.isSpeaker
+                          ? Icons.volume_up_rounded
+                          : Icons.volume_down_rounded,
+                      label: callProvider.isSpeaker
+                          ? strings.speakerLabel
+                          : strings.earpieceLabel,
+                      isActive: callProvider.isSpeaker,
+                      activeColor: accentColor,
+                      isDark: true,
+                      onTap: () => context.read<CallProvider>().toggleSpeaker(),
+                    ),
+                    _buildControlAction(
+                      icon: callProvider.isCameraOn
+                          ? Icons.videocam_rounded
+                          : Icons.videocam_off_rounded,
+                      label: callProvider.isCameraOn
+                          ? strings.cameraOnLabel
+                          : strings.cameraOffLabel,
+                      isActive: !callProvider.isCameraOn,
+                      activeColor: Colors.orangeAccent,
+                      isDark: true,
+                      onTap: () => context.read<CallProvider>().toggleCamera(),
+                    ),
+                    _buildControlAction(
+                      icon: Icons.flip_camera_android_rounded,
+                      label: strings.flipCameraLabel,
+                      isActive: false,
+                      activeColor: accentColor,
+                      isDark: true,
+                      onTap: () => context.read<CallProvider>().switchCamera(),
+                    ),
+                    _buildControlAction(
+                      icon: callProvider.isMuted
+                          ? Icons.mic_off_rounded
+                          : Icons.mic_rounded,
+                      label: callProvider.isMuted
+                          ? strings.unmuteLabel
+                          : strings.muteLabel,
+                      isActive: callProvider.isMuted,
+                      activeColor: Colors.orangeAccent,
+                      isDark: true,
+                      onTap: () => context.read<CallProvider>().toggleMute(),
+                    ),
+                    _buildControlAction(
+                      icon: Icons.call_end_rounded,
+                      label: strings.hangupLabel,
+                      isActive: true,
+                      activeColor: const Color(0xFFE53935),
+                      isDark: true,
+                      isDestructive: true,
+                      onTap: () => context.read<CallProvider>().endCall(),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _buildControlAction({

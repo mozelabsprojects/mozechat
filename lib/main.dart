@@ -235,15 +235,17 @@ Future<void> _firebaseMessagingBackgroundHandler(RemoteMessage message) async {
         }
 
         final effectiveCallerName = callerName ?? strings.unknownUser;
+        final isVideoCall = message.data['isVideo']?.toString() == 'true';
 
         await CallkitService().showCallkitIncoming(
           callerName: effectiveCallerName,
           roomId: roomId,
           callId: callId,
+          isVideo: isVideoCall,
         );
 
         await NotificationService.showMessageNotification(
-          title: strings.incomingVoiceCall,
+          title: isVideoCall ? strings.incomingVideoCall : strings.incomingVoiceCall,
           body: effectiveCallerName,
           payload: 'call:$roomId',
           isCallNotification: true,

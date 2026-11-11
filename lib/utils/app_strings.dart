@@ -233,6 +233,26 @@ class AppStrings {
   String get missedCallTitle => isTr ? 'Cevapsız Arama' : 'Missed Call';
   String get callBackText => isTr ? 'Geri Ara' : 'Call Back';
 
+  // --- WEBRTC VIDEO CALLS ---
+  String get videoCallTitle => isTr ? 'Şifreli Görüntülü Arama' : 'Encrypted Video Call';
+  String get startVideoCall => isTr ? 'Görüntülü Arama' : 'Video Call';
+  String get incomingVideoCall => isTr ? 'Gelen Görüntülü Arama' : 'Incoming Video Call';
+  String get ongoingVideoCall => isTr ? 'Görüntülü Arama Devam Ediyor' : 'Video Call in Progress';
+  String get secureWebrtcVideoConnection => isTr
+      ? 'Uçtan Uca Şifreli WebRTC Görüntü Kanalı'
+      : 'E2E Encrypted WebRTC Video Channel';
+  String get videoCallStartedMsg =>
+      isTr ? '📞 Görüntülü arama başlattı.' : '📞 Started a video call.';
+  String videoCallEndedMsg(String duration) => isTr
+      ? '📞 Görüntülü arama sonlandırıldı. Süre: $duration'
+      : '📞 Video call ended. Duration: $duration';
+  String get cameraOnLabel => isTr ? 'Kamera' : 'Camera';
+  String get cameraOffLabel => isTr ? 'Kamera Kapalı' : 'Camera Off';
+  String get flipCameraLabel => isTr ? 'Çevir' : 'Flip';
+  String get peerCameraOff => isTr ? 'Kamera kapalı' : 'Camera is off';
+  String get cameraPermissionDenied =>
+      isTr ? 'Kamera izni verilmedi' : 'Camera permission denied';
+
   // --- MEDIA GALLERY & PREVIEW ---
   String get mediaGalleryTitle => isTr ? 'MEDYA GALERİSİ' : 'MEDIA GALLERY';
   String get photosTab => isTr ? 'FOTOĞRAFLAR' : 'PHOTOS';
